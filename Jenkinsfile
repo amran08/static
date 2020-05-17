@@ -11,7 +11,7 @@ pipeline{
                   retry(3){         
                     withAWS(region:'ap-southeast-1',credentials:'aws-static') {
                     sh 'echo "Uploading content with AWS creds"'
-                        s3Upload(pathStyleAccessEnabled: true, payloadSigningEnabled: true, file:'index.html', bucket:'jenkins-awesome-project')
+                        s3Upload(pathStyleAccessEnabled: true, payloadSigningEnabled: true, file:'index.html', bucket:'s3-static-jenkis')
                     }
                   }
               }
