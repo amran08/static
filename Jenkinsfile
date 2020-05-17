@@ -20,7 +20,7 @@ pipeline{
               steps {
                   retry(3){
                       
-                      sh 'curl -X GET "https://jenkins-awesome-project.s3-ap-southeast-1.amazonaws.com/index.html"'
+                      sh 'curl -X GET "http://s3-static-jenkis.s3-website.us-east-2.amazonaws.com/index.html"'
                   }
               }
          }
