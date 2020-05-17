@@ -1,11 +1,6 @@
 pipeline{
     agent any
     stages{
-        stage('Lint HTML') {
-              steps {
-                  echo "11" 
-              }
-         }
         stage('Upload to AWS') {
               steps {
                   retry(3){         
