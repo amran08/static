@@ -19,6 +19,7 @@ pipeline{
          stage('Check if site is up') {
               steps {
                   retry(3){
+                      
                       sh 'curl -X GET "https://jenkins-awesome-project.s3-ap-southeast-1.amazonaws.com/index.html"'
                   }
               }
