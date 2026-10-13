@@ -328,6 +328,35 @@ const BANGLISH = {ajk:'আজকে',ajke:'আজকে',aj:'আজ',commission:
 const NUM_WORDS = {'এক':1,'দুই':2,'তিন':3,'চার':4,'পাঁচ':5,'ছয়':6,'সাত':7,'আট':8,'দশ':10,'পনেরো':15,'বিশ':20,'পঁচিশ':25,'ত্রিশ':30,'চল্লিশ':40,'উনপঞ্চাশ':49,'পঞ্চাশ':50,'ষাট':60,'সত্তর':70,'আশি':80,'নব্বই':90,'নিরানব্বই':99,'একশ':100,'একশো':100,'দুইশ':200,'দুইশো':200,'পাঁচশ':500,'পাঁচশো':500};
 const FILLER = new Set(['আমার','আমি','আমাকে','ভাই','আপা','প্লিজ','একটু','কি','কী','তো','না','তুমি','আপনি','বলো','বলেন','দেখি','ওই','এই','যে','একটা'].map(s=>s.normalize('NFC')));
 
+// Sound-alike key: Bengali spellings that STT mixes up become the same letters.
+const soundKey = s => s.normalize('NFC')
+  .replace(/[ীূ]/g, c => c === 'ী' ? 'ি' : 'ু')
+  .replace(/[শষ]/g,'স').replace(/ণ/g,'ন').replace(/য(?!়)/g,'জ').replace(/ড়/g,'র').replace(/ঢ়/g,'র')
+  .replace(/্য/g,'').replace(/[্ঁ]/g,'').replace(/ৈ/g,'ে').replace(/ৌ/g,'ো');
+// Words the app cares about. Fuzzy matching only ever maps to one of these.
+let _vocab = null, _vocabKeys = null;
+function VOCAB_SET(){
+  if (!_vocab){
+    const words = new Set([...Object.keys(ALIASES), 'বেশি','সবচেয়ে','সর্বোচ্চ','টার্গেট','ব্যালেন্স','বান্ডেল','ডাটা','মিনিট','দিন','মাস','এমবি']);
+    INTENTS.forEach(it => it.words.forEach(x => words.add(x)));
+    _vocab = new Set([...words].map(x => x.normalize('NFC')));
+    _vocabKeys = [..._vocab].map(x => [x, soundKey(x)]);
+  }
+  return _vocab;
+}
+function closestWord(w){
+  VOCAB_SET();
+  const k = soundKey(w);
+  if (k.length < 3) return null;               // too short to guess safely
+  const lim = k.length >= 6 ? 2 : 1;
+  let best = null, bd = 99, tie = false;
+  for (const [word, wk] of _vocabKeys){
+    if (Math.abs(wk.length - k.length) > lim) continue;
+    const d = lev(k, wk);
+    if (d < bd){ bd = d; best = word; tie = false; } else if (d === bd && word !== best) tie = true;
+  }
+  return best && bd <= lim && !tie ? best : null;  // two equally close words: don't guess
+}
 function lev(a,b){const m=a.length,n=b.length;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c;}return p[n];}
 const toks = s => s.split(' ').filter(Boolean);
 
@@ -372,19 +401,24 @@ const FILTERS = [
     });
     return {text:out.join(' '), changes:ch, mark: ch.map(c=>c[1])};
   }},
-  {bn:'বানান ঠিক করা', en:'Alias dictionary (রমিং → রোমিং)', run(t){
+  {bn:'বানান ঠিক করা', en:'Dictionary, then closest known word', run(t){
     const ch = [];
     const out = toks(t).map(w => {
+      // 1) exact entry in the dictionary
       if (ALIAS_MAP[w]){ ch.push([w, ALIAS_MAP[w]]); return ALIAS_MAP[w]; }
-      for (const sf of BN_SUFFIX){
-        if (w.length > sf.length+1 && w.endsWith(sf)){
-          const base = w.slice(0,-sf.length);
-          if (ALIAS_MAP[base]){ const r = ALIAS_MAP[base]+sf; ch.push([w, r]); return r; }
-        }
+      const forms = [[w, '']];
+      for (const sf of BN_SUFFIX) if (w.length > sf.length+1 && w.endsWith(sf)) forms.push([w.slice(0,-sf.length), sf]);
+      for (const [base, sf] of forms.slice(1)) if (ALIAS_MAP[base]){ const r = ALIAS_MAP[base]+sf; ch.push([w, r]); return r; }
+      // 2) closest known word, compared by sound so শ/ষ/স, ি/ী, ু/ূ, ন/ণ count as the same
+      if (!/[ঀ-৿]/.test(w) || VOCAB_SET().has(w)) return w;
+      for (const [base, sf] of forms){
+        if (VOCAB_SET().has(base)) return w;
+        const hit = closestWord(base);
+        if (hit){ const r = hit + sf; ch.push([w, r + ' (আনুমানিক)']); return r; }
       }
       return w;
     });
-    return {text:out.join(' '), changes:ch, mark: ch.map(c=>c[1])};
+    return {text:out.join(' '), changes:ch, mark: ch.map(c=>c[1].replace(' (আনুমানিক)',''))};
   }},
   {bn:'ফোন নাম্বার আলাদা', en:'Find + validate + mask MSISDN', run(t, ctx){
     const ch = [];
