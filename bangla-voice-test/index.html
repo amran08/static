@@ -328,6 +328,15 @@ const BANGLISH = {ajk:'আজকে',ajke:'আজকে',aj:'আজ',commission:
 const NUM_WORDS = {'এক':1,'দুই':2,'তিন':3,'চার':4,'পাঁচ':5,'ছয়':6,'সাত':7,'আট':8,'দশ':10,'পনেরো':15,'বিশ':20,'পঁচিশ':25,'ত্রিশ':30,'চল্লিশ':40,'উনপঞ্চাশ':49,'পঞ্চাশ':50,'ষাট':60,'সত্তর':70,'আশি':80,'নব্বই':90,'নিরানব্বই':99,'একশ':100,'একশো':100,'দুইশ':200,'দুইশো':200,'পাঁচশ':500,'পাঁচশো':500};
 const FILLER = new Set(['আমার','আমি','আমাকে','ভাই','আপা','প্লিজ','একটু','কি','কী','তো','না','তুমি','আপনি','বলো','বলেন','দেখি','ওই','এই','যে','একটা'].map(s=>s.normalize('NFC')));
 
+// Names and brands. Checked as whole phrases BEFORE spelling fixes, and never changed by them,
+// so "জিপি" (GP) is not turned into "জিবি" (GB). Longer phrases first.
+const ENTITIES = [
+  ['MyGP', ['মাই জিপি অ্যাপ','মাই জিবি অ্যাপ','মাই জিবি এপ','মাই জিপি','মাই জিবি','মাইজিপি','মাই জি পি','my gp','mygp','my g p']],
+  ['Grameenphone', ['গ্রামীণফোন','গ্রামীনফোন','গ্রামীণ ফোন','গ্রামীন ফোন','grameenphone']],
+  ['Skitto', ['স্কিটো','স্কিট্টো','skitto']],
+  ['GP', ['জিপি','gp']],
+];
+const PROTECTED = new Set(ENTITIES.flatMap(([c, vs]) => [c, ...vs]).map(x => x.normalize('NFC').toLowerCase()));
 // Sound-alike key: Bengali spellings that STT mixes up become the same letters.
 const soundKey = s => s.normalize('NFC')
   .replace(/[ীূ]/g, c => c === 'ী' ? 'ি' : 'ু')
@@ -386,6 +395,19 @@ const FILTERS = [
     });
     return {text:out.join(' '), changes:ch, mark: ch.map(c=>c[1])};
   }},
+  {bn:'নাম আর ব্র্যান্ড চেনা', en:'Phrase dictionary, protected from spelling fixes', run(t, ctx){
+    const ch = []; let s = ' ' + t + ' ';
+    for (const [canon, variants] of ENTITIES){
+      for (const v of variants){
+        // whole phrase, spaces optional, Bengali suffix (অ্যাপে, জিপির) dropped
+        const re = new RegExp('(^|\\s)' + v.replace(/\s+/g, '\\s*') + '[\\u0980-\\u09FF]*(?=\\s)', 'gi');
+        s = s.replace(re, (m, pre) => { ch.push([m.trim(), canon]); return pre + canon; });
+      }
+    }
+    const found = [...new Set(ch.map(c => c[1]))];
+    if (found.length) ctx.entities = found;
+    return {text: s.trim().replace(/\s+/g,' '), changes: ch, mark: found};
+  }},
   {bn:'বাংলিশ/ইংরেজি → বাংলা', en:'Banglish → Bengali', run(t){
     const ch = [];
     const out = toks(t).map(w => {
@@ -410,9 +432,9 @@ const FILTERS = [
       for (const sf of BN_SUFFIX) if (w.length > sf.length+1 && w.endsWith(sf)) forms.push([w.slice(0,-sf.length), sf]);
       for (const [base, sf] of forms.slice(1)) if (ALIAS_MAP[base]){ const r = ALIAS_MAP[base]+sf; ch.push([w, r]); return r; }
       // 2) closest known word, compared by sound so শ/ষ/স, ি/ী, ু/ূ, ন/ণ count as the same
-      if (!/[ঀ-৿]/.test(w) || VOCAB_SET().has(w)) return w;
-      for (const [base, sf] of forms){
-        if (VOCAB_SET().has(base)) return w;
+      if (!/[ঀ-৿]/.test(w) || VOCAB_SET().has(w) || PROTECTED.has(w.toLowerCase())) return w;
+      if (forms.some(([base]) => VOCAB_SET().has(base))) return w;   // already a known word + suffix (প্যাকে, টাকার)
+      for (const [base, sf] of [...forms.slice(1), forms[0]]){        // try with the suffix split off first
         const hit = closestWord(base);
         if (hit){ const r = hit + sf; ch.push([w, r + ' (আনুমানিক)']); return r; }
       }
@@ -454,6 +476,7 @@ const FILTERS = [
     if (v.price != null && (v.price < 10 || v.price > 5000)) ctx.warnings.push(`${v.price} টাকা স্বাভাবিক সীমার (১০–৫০০০) বাইরে।`);
     if (v.validity_days != null && (v.validity_days < 1 || v.validity_days > 365)) ctx.warnings.push(`${v.validity_days} দিন মেয়াদ অস্বাভাবিক।`);
     if (ctx.msisdn) v.msisdn = ctx.msisdn.slice(0,3)+'•••'+ctx.msisdn.slice(-4);
+    if (ctx.entities) v.app_or_brand = ctx.entities.join(', ');
     ctx.values = v;
     const ch = Object.entries(v).map(([k,x]) => [k, String(x)]);
     return {text:t, changes:ch, valuesStep:true};
