@@ -276,7 +276,7 @@ async function sendCloud(key, mime){
   setRec(false); status('Sending to Google…');
   const blob = new Blob(chunks, {type: mime});
   const b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
-  const body = { config: { encoding: mime.includes('ogg') ? 'OGG_OPUS' : 'WEBM_OPUS', sampleRateHertz: 48000, languageCode: lang, maxAlternatives: 3, enableAutomaticPunctuation: true }, audio: { content: b64 } };
+  const body = { config: { encoding: mime.includes('ogg') ? 'OGG_OPUS' : 'WEBM_OPUS', sampleRateHertz: 48000, languageCode: lang, maxAlternatives: 3, enableAutomaticPunctuation: true, profanityFilter: true }, audio: { content: b64 } };
   const start = performance.now();
   try {
     const resp = await fetch('https://speech.googleapis.com/v1/speech:recognize?key=' + encodeURIComponent(key), { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
@@ -337,6 +337,22 @@ const ENTITIES = [
   ['GP', ['জিপি','gp']],
 ];
 const PROTECTED = new Set(ENTITIES.flatMap(([c, vs]) => [c, ...vs]).map(x => x.normalize('NFC').toLowerCase()));
+// Profanity list. Left empty on purpose: GP should supply its own reviewed list (Bengali + Banglish
+// spellings). Add words here, or on the phone via localStorage key "badWords" (JSON array) for testing.
+const BAD_WORDS_BASE = [];
+function badWords(){
+  let extra = []; try { extra = JSON.parse(localStorage.getItem('badWords') || '[]'); } catch(_){}
+  return [...BAD_WORDS_BASE, ...extra].map(w => String(w).normalize('NFC').toLowerCase()).filter(Boolean);
+}
+function isBadWord(w){
+  const lo = w.toLowerCase(), k = soundKey(lo);
+  return badWords().some(b => {
+    const bk = soundKey(b);
+    if (lo === b || k === bk) return true;
+    if (k.startsWith(bk) && BN_SUFFIX.some(sf => k === bk + soundKey(sf))) return true;  // with a suffix
+    return bk.length >= 5 && Math.abs(k.length - bk.length) <= 1 && lev(k, bk) <= 1;   // one-letter misspelling
+  });
+}
 // Sound-alike key: Bengali spellings that STT mixes up become the same letters.
 const soundKey = s => s.normalize('NFC')
   .replace(/[ীূ]/g, c => c === 'ী' ? 'ি' : 'ু')
@@ -442,6 +458,16 @@ const FILTERS = [
     });
     return {text:out.join(' '), changes:ch, mark: ch.map(c=>c[1].replace(' (আনুমানিক)',''))};
   }},
+  {bn:'অশালীন শব্দ বাদ', en:'Profanity filter: removed, never logged', run(t, ctx){
+    const ch = []; const keep = [];
+    toks(t).forEach(w => {
+      const masked = /\*{2,}/.test(w);                       // Google's own filter returns e.g. "f***"
+      if (masked || isBadWord(w)){ ch.push(['•••', '✕']); return; }
+      keep.push(w);
+    });
+    if (ch.length) ctx.profanity = ch.length;
+    return {text: keep.join(' '), changes: ch, strike: ch.length ? ['•••'] : null};
+  }},
   {bn:'ফোন নাম্বার আলাদা', en:'Find + validate + mask MSISDN', run(t, ctx){
     const ch = [];
     let s = t.replace(/\+?88\s?(?=0\s?1)/,'');
@@ -477,6 +503,7 @@ const FILTERS = [
     if (v.validity_days != null && (v.validity_days < 1 || v.validity_days > 365)) ctx.warnings.push(`${v.validity_days} দিন মেয়াদ অস্বাভাবিক।`);
     if (ctx.msisdn) v.msisdn = ctx.msisdn.slice(0,3)+'•••'+ctx.msisdn.slice(-4);
     if (ctx.entities) v.app_or_brand = ctx.entities.join(', ');
+    if (ctx.profanity) v.profanity_removed = ctx.profanity;
     ctx.values = v;
     const ch = Object.entries(v).map(([k,x]) => [k, String(x)]);
     return {text:t, changes:ch, valuesStep:true};
