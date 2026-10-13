@@ -531,12 +531,25 @@ const INTENTS = [
   {id:'recharge', bn:'রিচার্জ', words:['রিচার্জ','লোড','পাঠাও','পাঠান'], prio:2},
   {id:'pack', bn:'প্যাক / অফার', words:['প্যাক','অফার','ক্যাম্পেইন','ইন্টারনেট','ডাটা','জিবি','মিনিট','বান্ডেল','রোমিং','এমবি'], prio:1},
 ];
+// Words that describe a pack without naming it. If the sentence has one of these (or a price/days/GB value)
+// but no intent word, it is about packs.
+const PACK_ATTR_WORDS = ['দাম','সস্তা','কমদাম','দামি','মেয়াদ','মেয়াদি','জিবি','এমবি','মিনিট','টকটাইম','ভ্যালিডিটি','লিমিট'].map(s=>s.normalize('NFC'));
 function detectIntent(t, ctx){
   const w = toks(t);
   const hits = INTENTS.map(it => ({it, found: it.words.filter(k => w.some(x => x.startsWith(k)))}));
   const any = hits.filter(h => h.found.length);
   let intent = null, sub = '', conf = 'low', why = '';
-  if (!any.length){ return {intent:null, label:'বুঝতে পারিনি', sub:'টাইপ বক্স দেখাও', conf:'low', why:'কোনো কিওয়ার্ড মেলেনি', hits}; }
+  if (!any.length){
+    // No intent word, but the sentence talks about a pack's ATTRIBUTES (price, validity, data, minutes)
+    // → it can only be about packs: "কম দামের কি আছে", "৭ দিনের কি আছে", "সস্তা কিছু দাও".
+    const v0 = ctx.values || {};
+    const attr = PACK_ATTR_WORDS.filter(k => w.some(x => x.startsWith(k)));
+    const slotHit = ['price','validity_days','data_gb','minutes'].filter(k => v0[k] != null);
+    if (attr.length || slotHit.length){
+      const pack = INTENTS.find(i => i.id === 'pack');
+      any.push({it: pack, found: [...attr, ...slotHit], viaAttr: true});
+    } else return {intent:null, label:'বুঝতে পারিনি', sub:'টাইপ বক্স দেখাও', conf:'low', why:'কোনো কিওয়ার্ড মেলেনি', hits};
+  }
   // কমিশন wins over রিচার্জ ("রিচার্জে কমিশন কত"), রিচার্জ wins over প্যাক ("৪৯ টাকার প্যাক রিচার্জ করো")
   any.sort((a,b) => b.it.prio - a.it.prio || b.found.length - a.found.length);
   intent = any[0].it;
@@ -556,9 +569,16 @@ function detectIntent(t, ctx){
     if (v.validity_days != null) bits.push(v.validity_days + ' দিন');
     if (v.data_gb != null) bits.push(v.data_gb + ' জিবি');
     if (v.minutes != null) bits.push(v.minutes + ' মিনিট');
+    // Sort order from comparison words
+    const cheap = has('সস্তা') || has('কমদাম') || /কম\s+দাম/.test(t);
+    const costly = has('দামি') || /বেশি\s+দাম/.test(t);
+    const bigData = /(বেশি|বড়)\s+(জিবি|ডাটা|ইন্টারনেট)/.test(t);
+    const longest = /(বেশি|লম্বা)\s+(দিন|মেয়াদ)/.test(t);
+    if (cheap) bits.push('দাম কম থেকে বেশি'); else if (costly) bits.push('দাম বেশি থেকে কম');
+    if (bigData) bits.push('বেশি জিবি আগে'); if (longest) bits.push('বেশি মেয়াদ আগে');
     sub = ctx.msisdn ? 'এই কাস্টমারের জন্য অফার' + (bits.length ? ' · ' + bits.join(', ') : '') : (bits.length ? 'ফিল্টার: ' + bits.join(', ') : 'সব অফার');
   }
-  const strong = any[0].found.length >= 2 || (any.length === 1);
+  const strong = !any[0].viaAttr && (any[0].found.length >= 2 || any.length === 1);
   conf = strong ? 'high' : 'medium';
   why = 'মিলেছে: ' + any.map(h => `${h.it.bn} (${h.found.join(', ')})`).join(' · ');
   return {intent: intent.id, label: intent.bn, sub, conf, why, hits};
