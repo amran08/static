@@ -88,6 +88,18 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .kv dd{margin:0;font-family:var(--f-bn)}
 .big-intent{font-size:20px;font-weight:600;font-family:var(--f-bn)}
 .warnline{font-size:13px;color:var(--warn)}
+.pbar{height:8px;border-radius:4px;background:var(--sunk);border:1px solid var(--line);overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.sbars{display:flex;flex-direction:column;gap:5px}
+.sb{display:grid;grid-template-columns:92px minmax(0,1fr) 44px;gap:8px;align-items:center;font-size:13px}
+.sb .n{font-family:var(--f-bn)}
+.sb .tr{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden}
+.sb .tr i{display:block;height:100%;background:var(--accent)}
+.sb .v{font-family:var(--f-mono);font-size:12px;text-align:right;color:var(--muted)}
+.near{font-size:13px;color:var(--muted);font-family:var(--f-bn)}
+.fb{display:flex;flex-wrap:wrap;gap:6px}
+.fb button{appearance:none;font:inherit;font-family:var(--f-bn);font-size:13px;min-height:36px;padding:0 12px;border-radius:18px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.fb button.on{background:var(--ok-soft);color:var(--ok);border-color:transparent}
 </style>
 </head>
 <body>
@@ -148,6 +160,18 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
       <button class="btn" type="submit" style="flex-shrink:0">Run</button>
     </form>
     <div class="samples" id="samples"></div>
+  </section>
+
+  <section class="card" aria-label="Intent model">
+    <div class="lbl">ইন্টেন্ট মডেল · multilingual-e5-small</div>
+    <p class="note" id="mStatus">লোড হয়নি। প্রথমবার প্রায় ১২০ MB ডাউনলোড হবে, তারপর ফোনে ক্যাশে থাকবে। Wi-Fi-তে লোড করো।</p>
+    <div class="pbar" id="mBarWrap" hidden><i id="mBar"></i></div>
+    <div class="row">
+      <button class="btn" id="mLoad">মডেল লোড করো</button>
+      <button class="btn" id="mExport" hidden>সংগ্রহ করা ডেটা কপি করো</button>
+      <button class="btn" id="mClear" hidden>আমার যোগ করা বাক্য মুছো</button>
+    </div>
+    <p class="note" id="mInfo"></p>
   </section>
 
   <section aria-label="Pipeline" id="pipeWrap" hidden style="display:flex;flex-direction:column;gap:0">
@@ -534,6 +558,41 @@ const INTENTS = [
 // Words that describe a pack without naming it. If the sentence has one of these (or a price/days/GB value)
 // but no intent word, it is about packs.
 const PACK_ATTR_WORDS = ['দাম','সস্তা','কমদাম','দামি','মেয়াদ','মেয়াদি','জিবি','এমবি','মিনিট','টকটাইম','ভ্যালিডিটি','লিমিট'].map(s=>s.normalize('NFC'));
+// What exactly inside an intent: used by both the rules and the model.
+function subFor(id, t, ctx){
+  const w = toks(t); let sub = '';
+  const v = ctx.values || {};
+  const has = k => w.some(x => x.startsWith(k));
+  if (id === 'commission'){
+    if (has('বেশি') || has('সবচেয়ে') || has('টপ') || has('সর্বোচ্চ')) sub = 'সবচেয়ে বেশি কমিশনের প্যাক';
+    else if (has('রিচার্জ') || v.price != null) sub = v.price != null ? `${v.price} টাকা রিচার্জের কমিশন` : 'রিচার্জ কমিশন রেট';
+    else sub = 'আমার কমিশন রিপোর্ট';
+  } else if (id === 'recharge'){
+    sub = [v.msisdn ? `নাম্বার ${v.msisdn}` : 'নাম্বার চাই', v.price != null ? `${v.price} টাকা` : 'টাকার অঙ্ক চাই'].join(' · ');
+    if (!v.msisdn || v.price == null) ctx.warnings.push('রিচার্জ স্ক্রিনে বাকি ঘরগুলো রিটেইলারকে পূরণ করতে বলো। সবসময় কনফার্ম নিয়ে তারপর রিচার্জ।');
+  } else if (id === 'pack'){
+    const bits = [];
+    if (has('রোমিং')) bits.push('রোমিং');
+    if (v.price != null) bits.push((v.price_max ? '< ' : '') + v.price + ' টাকা');
+    if (v.validity_days != null) bits.push(v.validity_days + ' দিন');
+    if (v.data_gb != null) bits.push(v.data_gb + ' জিবি');
+    if (v.minutes != null) bits.push(v.minutes + ' মিনিট');
+    // Sort order from comparison words
+    const cheap = has('সস্তা') || has('কমদাম') || /কম\s+দাম/.test(t);
+    const costly = has('দামি') || /বেশি\s+দাম/.test(t);
+    const bigData = /(বেশি|বড়)\s+(জিবি|ডাটা|ইন্টারনেট)/.test(t);
+    const longest = /(বেশি|লম্বা)\s+(দিন|মেয়াদ)/.test(t);
+    if (cheap) bits.push('দাম কম থেকে বেশি'); else if (costly) bits.push('দাম বেশি থেকে কম');
+    if (bigData) bits.push('বেশি জিবি আগে'); if (longest) bits.push('বেশি মেয়াদ আগে');
+    sub = ctx.msisdn ? 'এই কাস্টমারের জন্য অফার' + (bits.length ? ' · ' + bits.join(', ') : '') : (bits.length ? 'ফিল্টার: ' + bits.join(', ') : 'সব অফার');
+  } else if (id === 'complaint'){
+    sub = 'অভিযোগ / সাপোর্ট স্ক্রিন খোলো';
+  } else {
+    sub = 'টাইপ বক্স দেখাও';
+  }
+  return sub;
+}
+
 function detectIntent(t, ctx){
   const w = toks(t);
   const hits = INTENTS.map(it => ({it, found: it.words.filter(k => w.some(x => x.startsWith(k)))}));
@@ -553,31 +612,7 @@ function detectIntent(t, ctx){
   // কমিশন wins over রিচার্জ ("রিচার্জে কমিশন কত"), রিচার্জ wins over প্যাক ("৪৯ টাকার প্যাক রিচার্জ করো")
   any.sort((a,b) => b.it.prio - a.it.prio || b.found.length - a.found.length);
   intent = any[0].it;
-  const v = ctx.values || {};
-  const has = k => w.some(x => x.startsWith(k));
-  if (intent.id === 'commission'){
-    if (has('বেশি') || has('সবচেয়ে') || has('টপ') || has('সর্বোচ্চ')) sub = 'সবচেয়ে বেশি কমিশনের প্যাক';
-    else if (has('রিচার্জ') || v.price != null) sub = v.price != null ? `${v.price} টাকা রিচার্জের কমিশন` : 'রিচার্জ কমিশন রেট';
-    else sub = 'আমার কমিশন রিপোর্ট';
-  } else if (intent.id === 'recharge'){
-    sub = [v.msisdn ? `নাম্বার ${v.msisdn}` : 'নাম্বার চাই', v.price != null ? `${v.price} টাকা` : 'টাকার অঙ্ক চাই'].join(' · ');
-    if (!v.msisdn || v.price == null) ctx.warnings.push('রিচার্জ স্ক্রিনে বাকি ঘরগুলো রিটেইলারকে পূরণ করতে বলো। সবসময় কনফার্ম নিয়ে তারপর রিচার্জ।');
-  } else {
-    const bits = [];
-    if (has('রোমিং')) bits.push('রোমিং');
-    if (v.price != null) bits.push((v.price_max ? '< ' : '') + v.price + ' টাকা');
-    if (v.validity_days != null) bits.push(v.validity_days + ' দিন');
-    if (v.data_gb != null) bits.push(v.data_gb + ' জিবি');
-    if (v.minutes != null) bits.push(v.minutes + ' মিনিট');
-    // Sort order from comparison words
-    const cheap = has('সস্তা') || has('কমদাম') || /কম\s+দাম/.test(t);
-    const costly = has('দামি') || /বেশি\s+দাম/.test(t);
-    const bigData = /(বেশি|বড়)\s+(জিবি|ডাটা|ইন্টারনেট)/.test(t);
-    const longest = /(বেশি|লম্বা)\s+(দিন|মেয়াদ)/.test(t);
-    if (cheap) bits.push('দাম কম থেকে বেশি'); else if (costly) bits.push('দাম বেশি থেকে কম');
-    if (bigData) bits.push('বেশি জিবি আগে'); if (longest) bits.push('বেশি মেয়াদ আগে');
-    sub = ctx.msisdn ? 'এই কাস্টমারের জন্য অফার' + (bits.length ? ' · ' + bits.join(', ') : '') : (bits.length ? 'ফিল্টার: ' + bits.join(', ') : 'সব অফার');
-  }
+  sub = subFor(intent.id, t, ctx);
   const strong = !any[0].viaAttr && (any[0].found.length >= 2 || any.length === 1);
   conf = strong ? 'high' : 'medium';
   why = 'মিলেছে: ' + any.map(h => `${h.it.bn} (${h.found.join(', ')})`).join(' · ');
@@ -596,6 +631,7 @@ function runPipeline(raw){
   let text = raw; const cards = [];
   cards.push({n:0, bn:'স্পিচ টু টেক্সট', en:'What Google returned', text: raw, changes: [], changed: true, src:true});
   FILTERS.forEach((f, i) => {
+    if (f.bn === 'অপ্রয়োজনীয় শব্দ বাদ') ctx.modelText = text;   // the model reads the sentence WITH filler words
     const r = f.run(text, ctx);
     cards.push({n:i+1, bn:f.bn, en:f.en, text:r.text, changes:r.changes, changed:r.changes.length>0, mark:r.mark, strike:r.strike, valuesStep:r.valuesStep});
     text = r.text;
@@ -622,9 +658,134 @@ function runPipeline(raw){
     ${ctx.warnings.map(w => `<div class="warnline bn">⚠ ${esc(w)}</div>`).join('')}
     <details><summary>JSON the app would use</summary><pre>${esc(JSON.stringify({intent: res.intent, detail: res.sub, confidence: res.conf, values: ctx.values, text_for_model: text}, null, 2))}</pre></details>
   </div></div>`;
-  $('pipe').innerHTML = html + final;
+  $('pipe').innerHTML = html + final + '<div id="modelSlot"></div>';
   $('pipeWrap').hidden = false;
+  modelStep(raw, ctx, res).catch(e => console.error(e));
 }
+
+// ================= Intent model: embedding similarity in the browser =================
+// Starter example sentences, written once (the "LLM-generated, human-reviewed" set).
+// Real retailer sentences collected with the feedback buttons are added on top.
+const EXAMPLES = {
+  commission: ['আজকে কমিশন বেশি কোন প্যাকে','কোন প্যাক বেচলে লাভ বেশি','সবচেয়ে বেশি কমিশনের অফার কোনটা','কোনটায় আমার ইনকাম বেশি হবে','আজকে কত কমিশন পেলাম','এই মাসে আমার কমিশন কত হয়েছে','৫০ টাকা রিচার্জে কমিশন কত','রিচার্জ করলে কত পার্সেন্ট পাই','কমিশন রিপোর্ট দেখাও','গতকালের কমিশন কত','কোনটা বিক্রি করলে বেশি টাকা পাব','লাভ বেশি এমন প্যাক দেখাও','কমিশন কবে পাব','টপ কমিশন অফার','বান্ডেল বেচলে কমিশন কত','রোমিং প্যাকে কমিশন কত','কোন ক্যাম্পেইনে কমিশন বেশি','১০০ টাকার রিচার্জে আমার লাভ কত','আজকের কমিশন হিসাব'],
+  recharge: ['এই নাম্বারে ৪৯ টাকা রিচার্জ করো','৫০ টাকা রিচার্জ দাও','এই নাম্বারে ১০০ টাকা পাঠাও','রিচার্জ করতে চাই','কাস্টমারকে রিচার্জ করে দাও','ফ্লেক্সিলোড করব','২০ টাকা লোড দাও','নাম্বারে টাকা ভরে দাও','রিচার্জ স্ক্রিন খোলো','এই নাম্বারে ১৪৯ টাকা রিচার্জ','রিচার্জ দেব','একটা রিচার্জ করো','কাস্টমারের নাম্বারে ব্যালেন্স দাও','৩০০ টাকা রিচার্জ করে দাও','নতুন রিচার্জ'],
+  pack: ['কম দামের কি আছে','সস্তা প্যাক দেখাও','৩০ দিনের ইন্টারনেট প্যাক','৫০ টাকার ক্যাম্পেইন কি আছে','৪০ জিবি প্যাক কত টাকা','৭ দিনের মিনিট প্যাক','রোমিং প্যাক কি আছে','নতুন অফার কি এসেছে','১০০ টাকার নিচে কি অফার','বান্ডেল অফার গুলো দেখাও','বেশি জিবির প্যাক কোনটা','মাসিক ডাটা প্যাক','এই নাম্বারে কোন অফার আছে','কাস্টমার কোন অফার পাবে','আজকের ক্যাম্পেইন লিস্ট','সবচেয়ে সস্তা ইন্টারনেট','টকটাইম অফার দেখাও','এক দিনের প্যাক','মাই জিপি অফার কি আছে','কোনটায় মেয়াদ বেশি','দামি প্যাক দেখাও'],
+  complaint: ['রিচার্জ হয় না কেন','টাকা কেটে গেছে কিন্তু রিচার্জ হয়নি','অফার চালু হয়নি','প্যাক কিনেছি কিন্তু পায়নি','কমিশন আসেনি','অ্যাপ কাজ করছে না','রিচার্জ ফেইল হয়েছে','কাস্টমার বলছে ইন্টারনেট পাচ্ছে না','ভুল নাম্বারে রিচার্জ হয়ে গেছে','টাকা ফেরত চাই','ব্যালেন্স কেটে নিয়েছে','লেনদেন আটকে আছে','অভিযোগ করতে চাই','রিচার্জে সমস্যা হচ্ছে','কমিশন কম দিয়েছে','সার্ভার ডাউন নাকি'],
+  out_of_scope: ['আজকে আবহাওয়া কেমন','খেলার স্কোর কত','তুমি কে','একটা গান শোনাও','হ্যালো','ধন্যবাদ','আমার দোকান খোলা','কয়টা বাজে','খবর কি','ভাত খেয়েছ','নামাজের সময় কখন','জোকস বলো'],
+};
+const M_LABEL = {commission:'কমিশন', recharge:'রিচার্জ', pack:'প্যাক / অফার', complaint:'অভিযোগ', out_of_scope:'বুঝতে পারিনি'};
+// NOT calibrated yet: e5 scores sit in a narrow high band. Adjust after testing ~100 real sentences.
+const M_ACCEPT = 0.86, M_ASK = 0.82, M_MARGIN = 0.012;
+const MODEL_ID = 'Xenova/multilingual-e5-small';
+let extractor = null, index = [], modelBusy = false;   // index: [{intent, text, vec, mine}]
+
+const cleanForModel = raw => { const c = {warnings: [], values: {}}; let t = raw;
+  for (const f of FILTERS){ if (f.bn === 'অপ্রয়োজনীয় শব্দ বাদ') return t; t = f.run(t, c).text; } return t; };
+async function embed(texts){
+  const out = await extractor(texts.map(t => 'query: ' + t), {pooling: 'mean', normalize: true});
+  return out.tolist();
+}
+const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+const myExamples = () => store.get('myExamples', []);
+const labels = () => store.get('labels', []);
+
+function mInfo(){
+  const mine = myExamples().length, lab = labels().length;
+  const base = Object.values(EXAMPLES).reduce((n, a) => n + a.length, 0);
+  $('mInfo').textContent = extractor ? `${base}টা শুরুর উদাহরণ + তোমার যোগ করা ${mine}টা বাক্য। সংগ্রহ করা লেবেল: ${lab}টা।` : '';
+  $('mExport').hidden = !lab; $('mClear').hidden = !mine;
+}
+
+async function loadModel(){
+  if (extractor || modelBusy) return;
+  modelBusy = true; $('mLoad').disabled = true; $('mBarWrap').hidden = false;
+  $('mStatus').textContent = 'লাইব্রেরি লোড হচ্ছে…';
+  try {
+    const T = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2/dist/transformers.min.js');
+    const seen = {};
+    extractor = await T.pipeline('feature-extraction', MODEL_ID, {
+      dtype: 'q8',
+      progress_callback: p => {
+        if (p.status === 'progress' && p.total){ seen[p.file] = [p.loaded, p.total];
+          const [l, tt] = Object.values(seen).reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
+          $('mBar').style.width = Math.round(100 * l / tt) + '%';
+          $('mStatus').textContent = `ডাউনলোড হচ্ছে… ${Math.round(l / 1048576)} / ${Math.round(tt / 1048576)} MB`; }
+      }
+    });
+    $('mStatus').textContent = 'উদাহরণ বাক্যগুলো vector-এ রূপান্তর হচ্ছে…';
+    const rows = [];
+    for (const [intent, arr] of Object.entries(EXAMPLES)) for (const t of arr) rows.push({intent, text: cleanForModel(t), mine: false});
+    for (const e of myExamples()) rows.push({intent: e.intent, text: e.text, mine: true});
+    const vecs = [];
+    for (let i = 0; i < rows.length; i += 16) vecs.push(...await embed(rows.slice(i, i + 16).map(r => r.text)));
+    index = rows.map((r, i) => ({...r, vec: vecs[i]}));
+    store.set('modelWanted', true);
+    $('mStatus').textContent = 'মডেল তৈরি। এখন প্রতিটা বাক্যে রুলের পাশাপাশি মডেলের ফলও দেখাবে।';
+    $('mBarWrap').hidden = true; $('mLoad').hidden = true;
+    mInfo();
+    const last = $('pipeSrc').textContent.replace(/^“|”$/g, '');
+    if (last) runPipeline(last);
+  } catch (e){
+    console.error(e); extractor = null;
+    $('mStatus').textContent = 'মডেল লোড হয়নি: ' + (e && e.message ? e.message : e) + '। নেট দেখে আবার চেষ্টা করো।';
+    $('mLoad').disabled = false;
+  } finally { modelBusy = false; }
+}
+$('mLoad').onclick = loadModel;
+
+let modelRun = 0;
+async function modelStep(raw, ctx, ruleRes){
+  const slot = $('modelSlot'); if (!slot) return;
+  const my = ++modelRun;
+  if (!extractor){
+    slot.innerHTML = `<div class="st same"><div class="rail"><div class="dot">e5</div><div class="line"></div></div><div class="sc"><div class="sh"><span class="sn">ইন্টেন্ট (মডেল)</span><span class="se">Embedding similarity</span><span class="tag">লোড হয়নি</span></div><span class="se">উপরের "মডেল লোড করো" চাপলে এখানে মডেলের ফল দেখাবে।</span></div></div>`;
+    return;
+  }
+  const text = ctx.modelText || raw;
+  const q = (await embed([text]))[0];
+  if (my !== modelRun) return;
+  const best = {}, near = {};
+  for (const r of index){ const s = dot(q, r.vec); if (best[r.intent] == null || s > best[r.intent]){ best[r.intent] = s; near[r.intent] = r; } }
+  const ranked = Object.entries(best).sort((a, b) => b[1] - a[1]);
+  const [topId, topS] = ranked[0], second = ranked[1] ? ranked[1][1] : 0, margin = topS - second;
+  let decision, tag;
+  if (topId === 'out_of_scope' || topS < M_ASK){ decision = 'fallback'; tag = '<span class="tag warn">ফলব্যাক</span>'; }
+  else if (topS >= M_ACCEPT && margin >= M_MARGIN){ decision = 'route'; tag = '<span class="tag ok">সরাসরি উত্তর</span>'; }
+  else { decision = 'ask'; tag = '<span class="tag warn">রিটেইলারকে জিজ্ঞেস</span>'; }
+  const min = Math.min(...ranked.map(r => r[1])), span = Math.max(1e-6, topS - min);
+  const bars = ranked.map(([id, s]) => `<div class="sb"><span class="n">${esc(M_LABEL[id])}</span><span class="tr"><i style="width:${Math.max(4, Math.round(100 * (s - min) / span))}%"></i></span><span class="v">${s.toFixed(3)}</span></div>`).join('');
+  const sub = decision === 'route' ? subFor(topId, ctx.modelText ? toks(ctx.modelText).filter(w => !FILLER.has(w)).join(' ') : text, {...ctx, warnings: []}) : decision === 'ask' ? 'অপশন দেখাও: ' + ranked.filter(r => r[0] !== 'out_of_scope').slice(0, 3).map(r => M_LABEL[r[0]]).join(' / ') : 'টাইপ বক্স দেখাও';
+  const agree = ruleRes.intent === (decision === 'fallback' ? null : topId);
+  const fb = Object.keys(M_LABEL).map(id => `<button data-fb="${id}">${esc(M_LABEL[id])}</button>`).join('');
+  slot.innerHTML = `<div class="st final"><div class="rail"><div class="dot">e5</div><div class="line"></div></div><div class="sc">
+    <div class="sh"><span class="sn">ইন্টেন্ট (মডেল)</span><span class="se">Embedding similarity</span>${tag}</div>
+    <div class="big-intent">${esc(M_LABEL[topId])} <span class="se">(${topId})</span></div>
+    <div class="bn">${esc(sub)}</div>
+    <div class="sbars">${bars}</div>
+    <div class="near">সবচেয়ে কাছের উদাহরণ: “${esc(near[topId].text)}”${near[topId].mine ? ' (তোমার যোগ করা)' : ''} · margin ${margin.toFixed(3)}</div>
+    <div class="se">${agree ? 'রুল আর মডেল একমত।' : 'রুল বলছে: ' + esc(ruleRes.label) + '। মডেল আর রুল আলাদা।'} সীমা এখনো ঠিক করা হয়নি (accept ${M_ACCEPT}, ask ${M_ASK}).</div>
+    <div class="lbl" style="margin-top:4px">ঠিক ইন্টেন্ট কোনটা? ট্যাপ করলে বাক্যটা মডেলের উদাহরণে যোগ হবে</div>
+    <div class="fb" id="fbRow">${fb}</div>
+  </div></div>`;
+  $('fbRow').onclick = async e => {
+    const b = e.target.closest('[data-fb]'); if (!b) return;
+    const intent = b.dataset.fb;
+    b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    const lab = labels(); lab.push({at: new Date().toISOString(), raw: mask(raw), model_text: mask(text), predicted: topId, score: +topS.toFixed(4), rule: ruleRes.intent, label: intent});
+    store.set('labels', lab.slice(-500));
+    const mine = myExamples(); if (!mine.some(x => x.text === text && x.intent === intent)){ mine.push({text, intent}); store.set('myExamples', mine); index.push({intent, text, mine: true, vec: q}); }
+    mInfo();
+  };
+}
+const mask = s => String(s).replace(/0\s?1[3-9][\d\s]{8,12}/g, '<MSISDN>');
+
+$('mExport').onclick = async () => {
+  const data = JSON.stringify({labels: labels(), my_examples: myExamples()}, null, 2);
+  try { await navigator.clipboard.writeText(data); $('mInfo').textContent = 'কপি হয়েছে। এটা intents.yaml-এ উদাহরণ হিসেবে বা ট্রেইনিং ডেটা হিসেবে ব্যবহার করা যাবে।'; }
+  catch(_){ $('raw').textContent = data; $('rawBox').hidden = false; $('rawBox').open = true; $('mInfo').textContent = 'কপি হয়নি; উপরের "Raw API response" বক্সে দেখানো হলো, সেখান থেকে কপি করো।'; }
+};
+$('mClear').onclick = () => { store.set('myExamples', []); index = index.filter(r => !r.mine); mInfo(); };
+if (store.get('modelWanted', false)) setTimeout(loadModel, 500);
 
 const SAMPLES = ['আজকে কমিসন বেশি কোন পেকে','রমিং প্যাক কি আছে','০১৭১১ ২২৩৩৪৪ নাম্বারে উনপঞ্চাশ টাকা রিচার্জ দাও','৩০ দিনের ৪০ জিবি কত টাকা','৫০ টাকা রিচার্জে কমিশন কত','ajke roaming offer ache','ভাই ১০০ টাকার নিচে ইন্টারনেট অফার','০১৭১১২২৩৩ এ রিচার্জ করো','আজকে বৃষ্টি হবে নাকি'];
 $('samples').innerHTML = SAMPLES.map((s,i) => `<button class="sample" data-s="${i}">${esc(s)}</button>`).join('');
