@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bangla Voice Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<style>
+/* Layout: one phone-width column; big mic, live transcript card, alternatives, history. */
+:root{
+  --bg:#EEF1F5; --surface:#FFFFFF; --sunk:#F5F7FA; --ink:#162033; --muted:#566176; --line:#D5DBE4;
+  --accent:#2453C9; --accent-soft:#E7EDFB; --rec:#C62D22; --rec-soft:#FBE7E5; --ok:#1A7A3A; --ok-soft:#E3F3E8; --warn:#9A5800; --warn-soft:#FBF0DD;
+  --f-ui:"IBM Plex Sans","Hind Siliguri",system-ui,sans-serif; --f-bn:"Hind Siliguri","IBM Plex Sans",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0F131B; --surface:#181E2A; --sunk:#131823; --ink:#E6EAF2; --muted:#9AA5B8; --line:#2B3446;
+  --accent:#7EA2FF; --accent-soft:#1D2742; --rec:#F2877C; --rec-soft:#3A1C1A; --ok:#5CCB7E; --ok-soft:#173022; --warn:#E5A84A; --warn-soft:#33270F; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+.wrap{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:18px 40px;display:flex;flex-direction:column;gap:14px}
+h1{font-size:22px;margin:0;font-weight:600}
+.sub{margin:0;color:var(--muted);font-size:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.seg button{appearance:none;border:none;border-right:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:14px;padding:0 12px;min-height:40px;cursor:pointer}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+input[type=password],input[type=text]{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:10px;padding:0 12px;font:inherit;background:var(--sunk);color:var(--ink)}
+.note{font-size:13px;color:var(--muted);margin:0}
+.micwrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 0 4px}
+#mic{width:96px;height:96px;border-radius:48px;border:none;background:var(--accent);color:var(--surface);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s}
+#mic:active{transform:scale(.96)}
+#mic.rec{background:var(--rec);animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--rec-soft)}50%{box-shadow:0 0 0 14px var(--rec-soft)}}
+@media (prefers-reduced-motion:reduce){#mic.rec{animation:none;outline:4px solid var(--rec-soft)}}
+#status{font-weight:500;text-align:center;min-height:24px}
+.out{font-family:var(--f-bn);font-size:22px;line-height:1.45;min-height:64px;word-break:break-word}
+.interim{color:var(--muted)}
+.meta{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-size:12.5px;padding:2px 9px;border-radius:999px;background:var(--sunk);border:1px solid var(--line);color:var(--muted);font-variant-numeric:tabular-nums}
+.chip.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.alts{display:flex;flex-direction:column;gap:6px}
+.alt{display:flex;justify-content:space-between;gap:10px;font-family:var(--f-bn);font-size:15px;padding:6px 10px;border-radius:8px;background:var(--sunk)}
+.alt span:last-child{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
+.btn{appearance:none;font:inherit;font-size:14px;font-weight:500;min-height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.err{background:var(--rec-soft);color:var(--rec);border-radius:10px;padding:10px 12px;font-size:14px}
+.hist{display:flex;flex-direction:column;gap:8px}
+.h{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.h .t{font-family:var(--f-bn);font-size:16px}
+.h .m{font-size:12px;color:var(--muted)}
+.next{border-style:dashed;background:transparent}
+pre{margin:0;font-family:var(--f-mono);font-size:12px;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow-x:auto;max-height:220px}
+details summary{cursor:pointer;font-size:13px;color:var(--muted)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:4px">
+    <h1>Bangla voice test</h1>
+    <p class="sub">Step 1 of the retailer voice search: speak in Bengali, see the text Google returns.</p>
+  </header>
+
+  <section class="card" aria-label="Settings">
+    <div class="row"><span class="lbl">Engine</span>
+      <span class="seg" role="group" aria-label="Engine">
+        <button id="engChrome" aria-pressed="true">Chrome speech</button>
+        <button id="engCloud" aria-pressed="false">Google Cloud API</button>
+      </span>
+    </div>
+    <div class="row"><span class="lbl">Language</span>
+      <span class="seg" role="group" aria-label="Language">
+        <button data-lang="bn-BD" aria-pressed="true">বাংলা bn-BD</button>
+        <button data-lang="en-US" aria-pressed="false">English</button>
+      </span>
+    </div>
+    <p class="note" id="engNote"></p>
+    <div id="keyBox" hidden style="display:flex;flex-direction:column;gap:6px">
+      <label for="apiKey" class="lbl">Google Cloud API key</label>
+      <input id="apiKey" type="password" autocomplete="off" placeholder="AIza…">
+      <p class="note">Kept only in this browser. Restrict the key to the Speech-to-Text API and this site's address in Google Cloud Console.</p>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Record">
+    <div class="micwrap">
+      <button id="mic" aria-label="Start recording">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+      </button>
+      <div id="status" aria-live="polite">Tap the mic and speak</div>
+    </div>
+    <div class="err" id="err" hidden></div>
+    <div>
+      <div class="lbl" style="margin-bottom:4px">Text</div>
+      <div class="out" id="out" aria-live="polite"><span class="interim">যেমন: আজকে কমিশন বেশি কোন প্যাকে</span></div>
+    </div>
+    <div class="meta" id="meta"></div>
+    <div class="alts" id="alts"></div>
+    <div class="row">
+      <button class="btn" id="copy" hidden>Copy text</button>
+      <button class="btn" id="clear" hidden>Clear</button>
+    </div>
+    <details id="rawBox" hidden><summary>Raw API response</summary><pre id="raw"></pre></details>
+  </section>
+
+  <section class="card next" aria-label="Next step">
+    <div class="lbl">Step 2 · next</div>
+    <p class="note">Find the intent (commission, recharge, pack) from this text. Not built yet.</p>
+  </section>
+
+  <section aria-label="History" style="display:flex;flex-direction:column;gap:8px">
+    <div class="row" style="justify-content:space-between"><span class="lbl">Recent results</span><button class="btn" id="clearHist" style="min-height:32px;font-size:13px">Clear history</button></div>
+    <div class="hist" id="hist"><p class="note">Nothing yet. Your last 20 results stay on this phone.</p></div>
+  </section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const store = { get(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:JSON.parse(v);}catch(_){return d;} }, set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(_){} } };
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let engine = store.get('engine', SR ? 'chrome' : 'cloud');
+let lang = store.get('lang', 'bn-BD');
+let recording = false, rec = null, mediaRec = null, chunks = [], stream = null, t0 = 0, finalText = '';
+let history = store.get('history', []);
+$('apiKey').value = store.get('apiKey', '');
+$('apiKey').addEventListener('input', e => store.set('apiKey', e.target.value.trim()));
+
+function setEngine(e){
+  engine = e; store.set('engine', e);
+  $('engChrome').setAttribute('aria-pressed', String(e==='chrome'));
+  $('engCloud').setAttribute('aria-pressed', String(e==='cloud'));
+  $('keyBox').hidden = e!=='cloud';
+  $('engNote').textContent = e==='chrome'
+    ? (SR ? 'Uses Chrome’s built-in speech recognition, which runs on Google’s servers. Free, no key. Shows text while you speak.' : 'This browser has no built-in speech recognition. Open the page in Chrome on Android, or use Google Cloud API.')
+    : 'Records your voice, then sends it to Google Cloud Speech-to-Text (v1). Needs an API key with billing on. Works best in Chrome.';
+}
+function setLang(l){ lang=l; store.set('lang',l); document.querySelectorAll('[data-lang]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.lang===l))); }
+$('engChrome').onclick = () => { if (!recording) setEngine('chrome'); };
+$('engCloud').onclick = () => { if (!recording) setEngine('cloud'); };
+document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { if (!recording) setLang(b.dataset.lang); });
+
+function status(t){ $('status').textContent = t; }
+function showErr(t){ $('err').textContent = t; $('err').hidden = !t; }
+function setRec(on){
+  recording = on; $('mic').classList.toggle('rec', on);
+  $('mic').setAttribute('aria-label', on ? 'Stop recording' : 'Start recording');
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function showText(final, interim){
+  $('out').innerHTML = esc(final) + (interim ? ' <span class="interim">' + esc(interim) + '</span>' : '');
+  const has = !!(final||interim).trim();
+  $('copy').hidden = !has; $('clear').hidden = !has;
+}
+function showResult({text, alts, ms, conf, engineName, raw}){
+  showText(text, '');
+  const chips = [`<span class="chip">${engineName}</span>`, `<span class="chip">${lang}</span>`, `<span class="chip">${ms} ms</span>`];
+  if (conf != null) chips.push(`<span class="chip ${conf>=0.75?'ok':'warn'}">confidence ${conf.toFixed(2)}</span>`);
+  $('meta').innerHTML = chips.join('');
+  $('alts').innerHTML = alts.length > 1 ? '<div class="lbl">Other guesses</div>' + alts.slice(1).map(a => `<div class="alt"><span>${esc(a.t)}</span><span>${a.c!=null?a.c.toFixed(2):'—'}</span></div>`).join('') : '';
+  if (raw){ $('raw').textContent = JSON.stringify(raw, null, 2); $('rawBox').hidden = false; } else $('rawBox').hidden = true;
+  if (text.trim()){
+    history.unshift({text, conf, ms, engine: engineName, lang, at: new Date().toISOString()});
+    history = history.slice(0, 20); store.set('history', history); renderHist();
+  }
+}
+function renderHist(){
+  $('hist').innerHTML = history.length ? history.map(h => `<div class="h"><span class="t">${esc(h.text)}</span><span class="m">${new Date(h.at).toLocaleTimeString()} · ${esc(h.engine)} · ${h.lang} · ${h.ms} ms${h.conf!=null?' · conf '+h.conf.toFixed(2):''}</span></div>`).join('')
+    : '<p class="note">Nothing yet. Your last 20 results stay on this phone.</p>';
+}
+$('clearHist').onclick = () => { history=[]; store.set('history',[]); renderHist(); };
+$('clear').onclick = () => { finalText=''; showText('',''); $('meta').innerHTML=''; $('alts').innerHTML=''; $('rawBox').hidden=true; };
+$('copy').onclick = async () => {
+  const t = $('out').textContent.trim();
+  try { await navigator.clipboard.writeText(t); status('Copied'); }
+  catch(_) { const r=document.createRange(); r.selectNodeContents($('out')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); status('Text selected, copy it from the menu'); }
+};
+
+const MIC_HELP = 'Microphone is blocked. Tap the lock icon in the address bar, allow Microphone, then reload.';
+
+// ---- Engine 1: Chrome Web Speech API (Google servers) ----
+function startChrome(){
+  if (!SR){ showErr('No built-in speech recognition here. Use Chrome on Android, or switch to Google Cloud API.'); return; }
+  rec = new SR();
+  rec.lang = lang; rec.interimResults = true; rec.maxAlternatives = 3; rec.continuous = false;
+  finalText = ''; let best = null; t0 = performance.now();
+  rec.onstart = () => { setRec(true); status('Listening… speak now'); };
+  rec.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++){
+      const r = e.results[i];
+      if (r.isFinal){
+        finalText += r[0].transcript;
+        best = Array.from(r).map(a => ({t: a.transcript, c: typeof a.confidence==='number' && a.confidence>0 ? a.confidence : null}));
+      } else interim += r[0].transcript;
+    }
+    showText(finalText, interim);
+  };
+  rec.onerror = e => {
+    const map = {'not-allowed': MIC_HELP, 'service-not-allowed': MIC_HELP, 'no-speech': 'Didn’t hear anything. Tap the mic and speak a little louder.', 'network': 'Network error. Chrome speech needs internet.', 'audio-capture': 'No microphone found.', 'language-not-supported': 'This language isn’t available here. Try Google Cloud API.'};
+    if (e.error !== 'aborted') showErr(map[e.error] || ('Speech error: ' + e.error));
+  };
+  rec.onend = () => {
+    setRec(false);
+    const ms = Math.round(performance.now() - t0);
+    if (finalText.trim()){ status('Done'); showResult({text: finalText.trim(), alts: best || [], ms, conf: best && best[0] ? best[0].c : null, engineName: 'Chrome speech'}); }
+    else status('Tap the mic and speak');
+  };
+  try { rec.start(); } catch(err){ showErr('Could not start: ' + err.message); }
+}
+
+// ---- Engine 2: Google Cloud Speech-to-Text v1 (REST) ----
+async function startCloud(){
+  const key = $('apiKey').value.trim();
+  if (!key){ showErr('Add your Google Cloud API key first.'); $('apiKey').focus(); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder){ showErr('This browser can’t record audio. Use Chrome.'); return; }
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus' : '');
+  if (!mime){ showErr('This browser records in a format Google v1 can’t read. Use Chrome on Android or desktop.'); return; }
+  try { stream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true}}); }
+  catch(_){ showErr(MIC_HELP); return; }
+  chunks = []; mediaRec = new MediaRecorder(stream, {mimeType: mime});
+  mediaRec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  mediaRec.onstop = () => sendCloud(key, mime);
+  mediaRec.start(); setRec(true); status('Recording… tap again to stop'); showText('', '');
+  setTimeout(() => { if (mediaRec && mediaRec.state === 'recording') stopRecording(); }, 55000); // sync API limit is 60 s
+}
+async function sendCloud(key, mime){
+  stream && stream.getTracks().forEach(t => t.stop());
+  setRec(false); status('Sending to Google…');
+  const blob = new Blob(chunks, {type: mime});
+  const b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
+  const body = { config: { encoding: mime.includes('ogg') ? 'OGG_OPUS' : 'WEBM_OPUS', sampleRateHertz: 48000, languageCode: lang, maxAlternatives: 3, enableAutomaticPunctuation: true }, audio: { content: b64 } };
+  const start = performance.now();
+  try {
+    const resp = await fetch('https://speech.googleapis.com/v1/speech:recognize?key=' + encodeURIComponent(key), { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+    const data = await resp.json();
+    const ms = Math.round(performance.now() - start);
+    if (!resp.ok){ showErr('Google said: ' + (data.error && data.error.message || resp.status)); status('Tap the mic and speak'); $('raw').textContent = JSON.stringify(data, null, 2); $('rawBox').hidden = false; return; }
+    const results = data.results || [];
+    if (!results.length){ status('Done'); showErr('Google heard no words. Speak closer to the phone and try again.'); $('raw').textContent = JSON.stringify(data, null, 2); $('rawBox').hidden = false; return; }
+    const text = results.map(r => r.alternatives[0].transcript).join(' ').trim();
+    const alts = (results[0].alternatives || []).map(a => ({t: a.transcript, c: typeof a.confidence==='number' ? a.confidence : null}));
+    status('Done');
+    showResult({text, alts, ms, conf: alts[0] ? alts[0].c : null, engineName: 'Google Cloud v1', raw: data});
+  } catch(err){
+    showErr('Could not reach Google: ' + err.message); status('Tap the mic and speak');
+  }
+}
+function stopRecording(){
+  if (engine === 'chrome' && rec){ status('Finishing…'); rec.stop(); }
+  else if (mediaRec && mediaRec.state === 'recording') mediaRec.stop();
+}
+$('mic').onclick = () => {
+  showErr('');
+  if (recording) return stopRecording();
+  if (engine === 'chrome') startChrome(); else startCloud();
+};
+
+setEngine(engine); setLang(lang); renderHist();
+if (!window.isSecureContext) showErr('Open this page over https, otherwise the microphone stays off.');
+</script>
+</body>
+</html>
