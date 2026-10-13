@@ -337,9 +337,19 @@ const ENTITIES = [
   ['GP', ['জিপি','gp']],
 ];
 const PROTECTED = new Set(ENTITIES.flatMap(([c, vs]) => [c, ...vs]).map(x => x.normalize('NFC').toLowerCase()));
-// Profanity list. Left empty on purpose: GP should supply its own reviewed list (Bengali + Banglish
-// spellings). Add words here, or on the phone via localStorage key "badWords" (JSON array) for testing.
-const BAD_WORDS_BASE = [];
+// Profanity blocklist: a STARTER list of common Bengali and Banglish swear words, for filtering only.
+// GP should review and extend it. Matching also catches suffixes (-র, -কে, -দের) and 1-letter misspellings
+// on words of 5+ letters. Extra words can be added on the phone via localStorage key "badWords" (JSON array).
+const BAD_WORDS_BASE = [
+  // Bengali script
+  'চোদ','চুদ','চোদা','চুদি','চুদা','চোদন','মাদারচোদ','বাইনচোদ','বোকাচোদা','খানকি','মাগি','মাগী','বেশ্যা',
+  'হারামি','হারামী','হারামজাদা','হারামজাদি','শালা','শালি','বাল','বালের','গান্ডু','পুটকি','ভোদা','চুতিয়া',
+  'জাউরা','শুয়োর','শুয়োরের','কুত্তা','কুত্তার','বেজন্মা','লেওড়া','ধোন',
+  // Banglish spellings
+  'chod','choda','chudi','chuda','chodon','madarchod','bainchod','bokachoda','khanki','magi','beshya',
+  'harami','haramjada','haramjadi','shala','shali','bal','baler','gandu','putki','bhoda','chutiya',
+  'jaura','shuor','shuorer','kutta','kuttar','bejonma','leora','dhon','fuck','shit','bastard','bitch',
+];
 function badWords(){
   let extra = []; try { extra = JSON.parse(localStorage.getItem('badWords') || '[]'); } catch(_){}
   return [...BAD_WORDS_BASE, ...extra].map(w => String(w).normalize('NFC').toLowerCase()).filter(Boolean);
@@ -372,7 +382,7 @@ function VOCAB_SET(){
 function closestWord(w){
   VOCAB_SET();
   const k = soundKey(w);
-  if (k.length < 3) return null;               // too short to guess safely
+  if (k.length < 4) return null;               // too short to guess safely (হয় → আয় was a real miss)
   const lim = k.length >= 6 ? 2 : 1;
   let best = null, bd = 99, tie = false;
   for (const [word, wk] of _vocabKeys){
@@ -517,7 +527,7 @@ const FILTERS = [
 ];
 
 const INTENTS = [
-  {id:'commission', bn:'কমিশন', words:['কমিশন','লাভ','ইনকাম','কামাই','আয়'], prio:3},
+  {id:'commission', bn:'কমিশন', words:['কমিশন','লাভ','ইনকাম','কামাই'], prio:3},
   {id:'recharge', bn:'রিচার্জ', words:['রিচার্জ','লোড','পাঠাও','পাঠান'], prio:2},
   {id:'pack', bn:'প্যাক / অফার', words:['প্যাক','অফার','ক্যাম্পেইন','ইন্টারনেট','ডাটা','জিবি','মিনিট','বান্ডেল','রোমিং','এমবি'], prio:1},
 ];
