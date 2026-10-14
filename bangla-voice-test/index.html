@@ -88,6 +88,16 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .kv dd{margin:0;font-family:var(--f-bn)}
 .big-intent{font-size:20px;font-weight:600;font-family:var(--f-bn)}
 .warnline{font-size:13px;color:var(--warn)}
+.tr-in{width:100%;min-width:0;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:inherit;font-family:var(--f-bn);font-size:15px;background:var(--sunk);color:var(--ink)}
+select.tr-in,input.tr-in{height:44px;padding-block:0}
+textarea.tr-in{resize:vertical;line-height:1.6}
+.tr-counts{display:flex;flex-wrap:wrap;gap:6px}
+.tr-counts span{font-family:var(--f-bn);font-size:12.5px;padding:2px 9px;border-radius:999px;background:var(--sunk);border:1px solid var(--line);font-variant-numeric:tabular-nums}
+.tr-counts span.new{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.btn.primary{background:var(--accent);color:var(--surface);border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.tr-stat{display:flex;gap:16px;flex-wrap:wrap;align-items:baseline}
+.tr-stat b{font-size:26px;font-variant-numeric:tabular-nums}
 .kb-scrim{position:fixed;inset:0;background:rgba(10,14,22,.45);z-index:20}
 .kb{position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);background:var(--bg);border-left:1px solid var(--line);z-index:21;overflow-y:auto;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
 .kb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -217,6 +227,38 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
       <button class="btn" id="mClear" hidden>আমার যোগ করা বাক্য মুছো</button>
     </div>
     <p class="note" id="mInfo"></p>
+  </section>
+
+  <section class="card" aria-label="Training" id="trainCard">
+    <div class="lbl">মডেল ট্রেইনিং</div>
+    <p class="note">ইন্টেন্টে নতুন বাক্য যোগ করো বা নতুন ইন্টেন্ট বানাও, তারপর "ট্রেইন করো"। এখানে e5-এর উপরে একটা ছোট ক্লাসিফায়ার (softmax head) ট্রেইন হয়, SetFit-এর দ্বিতীয় ধাপের মতো। পুরো SetFit সার্ভারে হবে।</p>
+    <div class="tr-counts" id="trCounts"></div>
+
+    <label for="trIntent" class="lbl">কোন ইন্টেন্টে যোগ করবে</label>
+    <select id="trIntent" class="tr-in"></select>
+    <div id="trNew" hidden style="display:flex;flex-direction:column;gap:6px">
+      <label for="trNewId" class="lbl">ইন্টেন্ট আইডি (ইংরেজি, যেমন balance_check)</label>
+      <input id="trNewId" class="tr-in" type="text" autocomplete="off" placeholder="balance_check">
+      <label for="trNewBn" class="lbl">বাংলা নাম</label>
+      <input id="trNewBn" class="tr-in" type="text" autocomplete="off" placeholder="ব্যালেন্স দেখা">
+      <label for="trNewWords" class="lbl">রুলের কিওয়ার্ড (ঐচ্ছিক, কমা দিয়ে)</label>
+      <input id="trNewWords" class="tr-in" type="text" autocomplete="off" placeholder="ব্যালেন্স, টাকা কত">
+    </div>
+    <label for="trText" class="lbl">উদাহরণ বাক্য, প্রতি লাইনে একটা</label>
+    <textarea id="trText" class="tr-in" rows="4" placeholder="নতুন সিম বিক্রি করব&#10;কাস্টমার সিম নিবে"></textarea>
+    <div class="err" id="trErr" hidden></div>
+    <div class="row">
+      <button class="btn" id="trAdd">যোগ করো</button>
+      <button class="btn primary" id="trTrain">ট্রেইন করো</button>
+    </div>
+    <div class="row">
+      <span class="lbl" style="margin:0">মডেল কীভাবে ঠিক করবে</span>
+      <span class="seg" role="group" aria-label="Model mode">
+        <button id="modeSim" aria-pressed="true">মিল খোঁজা</button>
+        <button id="modeHead" aria-pressed="false" disabled>ট্রেইন করা হেড</button>
+      </span>
+    </div>
+    <div id="trResult" aria-live="polite"></div>
   </section>
 
   <section aria-label="Pipeline" id="pipeWrap" hidden style="display:flex;flex-direction:column;gap:0">
@@ -389,13 +431,15 @@ const ALIASES = {
   'টাকা': ['টাহা','টেকা'],
   'জিবি': ['জি.বি','জি বি'],
   'নাম্বার': ['নম্বর','নাম্বর','নাম্বারে'],
+  'রেজিস্ট্রেশন': ['রেজিস্টেশন','রেজিস্ট্রেসন','রেজিষ্ট্রেশন','রেজিস্ট্রি'],
+  'বায়োমেট্রিক': ['বাইওমেট্রিক','বায়োমেট্রিকস','বায়োমেট্রিক্স'],
   'হিস্ট্রি': ['হিস্টরি','হিস্টোরি','হিসট্রি','হিস্ট্রী'],
   'স্টেটমেন্ট': ['স্টেটমেন','ইস্টেটমেন্ট','স্টেটমান্ট'],
 };
 const ALIAS_MAP = {};
 for (const [canon, vars] of Object.entries(ALIASES)) for (const v of vars) ALIAS_MAP[v.normalize('NFC')] = canon;
 
-const BANGLISH = {history:'হিস্ট্রি',histori:'হিস্ট্রি',statement:'স্টেটমেন্ট',transaction:'লেনদেন',ajk:'আজকে',ajke:'আজকে',aj:'আজ',commission:'কমিশন',commision:'কমিশন',comision:'কমিশন',komishon:'কমিশন',roaming:'রোমিং',roming:'রোমিং',beshi:'বেশি',besi:'বেশি',kon:'কোন',pack:'প্যাক',package:'প্যাক',offer:'অফার',target:'টার্গেট',taka:'টাকা',tk:'টাকা',din:'দিন',diner:'দিনের',gb:'জিবি',mb:'এমবি',internet:'ইন্টারনেট',minute:'মিনিট',min:'মিনিট',recharge:'রিচার্জ',flexi:'রিচার্জ',balance:'ব্যালেন্স',campaign:'ক্যাম্পেইন',number:'নাম্বার',koto:'কত',ache:'আছে',amar:'আমার',ki:'কি',koro:'করো',dao:'দাও',bundle:'বান্ডেল',data:'ডাটা'};
+const BANGLISH = {sim:'সিম',simcard:'সিমকার্ড',esim:'ই-সিম',registration:'রেজিস্ট্রেশন',biometric:'বায়োমেট্রিক',replace:'রিপ্লেস',history:'হিস্ট্রি',histori:'হিস্ট্রি',statement:'স্টেটমেন্ট',transaction:'লেনদেন',ajk:'আজকে',ajke:'আজকে',aj:'আজ',commission:'কমিশন',commision:'কমিশন',comision:'কমিশন',komishon:'কমিশন',roaming:'রোমিং',roming:'রোমিং',beshi:'বেশি',besi:'বেশি',kon:'কোন',pack:'প্যাক',package:'প্যাক',offer:'অফার',target:'টার্গেট',taka:'টাকা',tk:'টাকা',din:'দিন',diner:'দিনের',gb:'জিবি',mb:'এমবি',internet:'ইন্টারনেট',minute:'মিনিট',min:'মিনিট',recharge:'রিচার্জ',flexi:'রিচার্জ',balance:'ব্যালেন্স',campaign:'ক্যাম্পেইন',number:'নাম্বার',koto:'কত',ache:'আছে',amar:'আমার',ki:'কি',koro:'করো',dao:'দাও',bundle:'বান্ডেল',data:'ডাটা'};
 const NUM_WORDS = {'এক':1,'দুই':2,'তিন':3,'চার':4,'পাঁচ':5,'ছয়':6,'সাত':7,'আট':8,'দশ':10,'পনেরো':15,'বিশ':20,'পঁচিশ':25,'ত্রিশ':30,'চল্লিশ':40,'উনপঞ্চাশ':49,'পঞ্চাশ':50,'ষাট':60,'সত্তর':70,'আশি':80,'নব্বই':90,'নিরানব্বই':99,'একশ':100,'একশো':100,'দুইশ':200,'দুইশো':200,'পাঁচশ':500,'পাঁচশো':500};
 const FILLER = new Set(['আমার','আমি','আমাকে','ভাই','আপা','প্লিজ','একটু','কি','কী','তো','না','তুমি','আপনি','বলো','বলেন','দেখি','ওই','এই','যে','একটা'].map(s=>s.normalize('NFC')));
 
@@ -600,9 +644,12 @@ const FILTERS = [
 const INTENTS = [
   {id:'commission', bn:'কমিশন', words:['কমিশন','লাভ','ইনকাম','কামাই'], prio:3},
   {id:'recharge', bn:'রিচার্জ করা', words:['রিচার্জ','লোড','পাঠাও','পাঠান'], prio:2},
+  {id:'sim_sell', bn:'সিম বিক্রি', words:['সিম','সিমকার্ড','রেজিস্ট্রেশন','বায়োমেট্রিক','ই-সিম'], prio:1.5},
   {id:'recharge_history', bn:'রিচার্জ হিস্ট্রি', words:['হিস্ট্রি','ইতিহাস','লেনদেন','স্টেটমেন্ট','ট্রানজেকশন'], prio:2.5},
   {id:'pack', bn:'প্যাক / অফার', words:['প্যাক','অফার','ক্যাম্পেইন','ইন্টারনেট','ডাটা','জিবি','মিনিট','বান্ডেল','রোমিং','এমবি'], prio:1},
 ];
+// Words that make a SIM sentence a sale/registration task rather than an offer question.
+const SIM_ACTION = ['বিক্রি','বেচ','রেজিস্ট্রেশন','বায়োমেট্রিক','রিপ্লেস','হারিয়ে','হারানো','স্টক','অ্যাক্টিভ','এক্টিভ','চালু','তুলব','তুলতে','দাও','নিবে','নেবে','কিনবে'].map(s=>s.normalize('NFC'));
 // Signs that a recharge sentence is about recharges ALREADY done (show history), not a new one.
 const HISTORY_MARKERS = ['করলাম','করেছি','করছিলাম','দিলাম','দিয়েছি','হয়েছে','হলো','হল','কয়টা','কতগুলো','কতগুলা','কতটা','শেষ','আগের','গতকাল','গত','তালিকা','লিস্ট'].map(s=>s.normalize('NFC'));
 // Words that describe a pack without naming it. If the sentence has one of these (or a price/days/GB value)
@@ -614,7 +661,8 @@ function subFor(id, t, ctx){
   const v = ctx.values || {};
   const has = k => w.some(x => x.startsWith(k));
   if (id === 'commission'){
-    if (has('বেশি') || has('সবচেয়ে') || has('টপ') || has('সর্বোচ্চ')) sub = 'সবচেয়ে বেশি কমিশনের প্যাক';
+    if (has('সিম')) sub = 'সিম বিক্রির কমিশন';
+    else if (has('বেশি') || has('সবচেয়ে') || has('টপ') || has('সর্বোচ্চ')) sub = 'সবচেয়ে বেশি কমিশনের প্যাক';
     else if (has('রিচার্জ') || v.price != null) sub = v.price != null ? `${v.price} টাকা রিচার্জের কমিশন` : 'রিচার্জ কমিশন রেট';
     else sub = 'আমার কমিশন রিপোর্ট';
   } else if (id === 'recharge'){
@@ -638,6 +686,12 @@ function subFor(id, t, ctx){
   } else if (id === 'recharge_history'){
     const when = /আজ/.test(t) ? 'আজকের' : /গতকাল/.test(t) ? 'গতকালের' : /সপ্তাহ/.test(t) ? 'এই সপ্তাহের' : /মাস/.test(t) ? 'এই মাসের' : 'সাম্প্রতিক';
     sub = `${when} রিচার্জের তালিকা` + (v.msisdn ? ` · নাম্বার ${v.msisdn}` : '') + (/কয়টা|কতগুলো|কতগুলা|মোট/.test(t) ? ' · মোট সংখ্যা আর টাকা' : '');
+  } else if (id === 'sim_sell'){
+    if (/রিপ্লেস|হারিয়ে|হারানো|নষ্ট/.test(t)) sub = 'সিম রিপ্লেসমেন্ট';
+    else if (/স্টক|কয়টা সিম|কতগুলো সিম/.test(t)) sub = 'আমার সিম স্টক';
+    else if (/রেজিস্ট্রেশন|বায়োমেট্রিক/.test(t)) sub = 'বায়োমেট্রিক রেজিস্ট্রেশন';
+    else sub = 'নতুন সিম বিক্রি';
+    if (v.msisdn) sub += ` · নাম্বার ${v.msisdn}`;
   } else if (id === 'complaint'){
     sub = 'অভিযোগ / সাপোর্ট স্ক্রিন খোলো';
   } else {
@@ -672,6 +726,9 @@ function detectIntent(t, ctx){
     if (past.length && !failed) any.push({it: INTENTS.find(i => i.id === 'recharge_history'), found: past});
   }
   any.sort((a,b) => b.it.prio - a.it.prio || b.found.length - a.found.length);
+  if (any[0].it.id === 'sim_sell' && any.some(h => h.it.id === 'pack') && !SIM_ACTION.some(k => w.some(x => x.startsWith(k)))){
+    any.push(any.shift());   // "নতুন সিমে কোন অফার আছে" → pack
+  }
   intent = any[0].it;
   sub = subFor(intent.id, t, ctx);
   const strong = !any[0].viaAttr && (any[0].found.length >= 2 || any.length === 1);
@@ -731,11 +788,18 @@ const EXAMPLES = {
   commission: ['আজকে কমিশন বেশি কোন প্যাকে','কোন প্যাক বেচলে লাভ বেশি','সবচেয়ে বেশি কমিশনের অফার কোনটা','কোনটায় আমার ইনকাম বেশি হবে','আজকে কত কমিশন পেলাম','এই মাসে আমার কমিশন কত হয়েছে','৫০ টাকা রিচার্জে কমিশন কত','রিচার্জ করলে কত পার্সেন্ট পাই','কমিশন রিপোর্ট দেখাও','গতকালের কমিশন কত','কোনটা বিক্রি করলে বেশি টাকা পাব','লাভ বেশি এমন প্যাক দেখাও','কমিশন কবে পাব','টপ কমিশন অফার','বান্ডেল বেচলে কমিশন কত','রোমিং প্যাকে কমিশন কত','কোন ক্যাম্পেইনে কমিশন বেশি','১০০ টাকার রিচার্জে আমার লাভ কত','আজকের কমিশন হিসাব'],
   recharge: ['এই নাম্বারে ৪৯ টাকা রিচার্জ করো','৫০ টাকা রিচার্জ দাও','এই নাম্বারে ১০০ টাকা পাঠাও','রিচার্জ করতে চাই','কাস্টমারকে রিচার্জ করে দাও','ফ্লেক্সিলোড করব','২০ টাকা লোড দাও','নাম্বারে টাকা ভরে দাও','রিচার্জ স্ক্রিন খোলো','এই নাম্বারে ১৪৯ টাকা রিচার্জ','রিচার্জ দেব','একটা রিচার্জ করো','কাস্টমারের নাম্বারে ব্যালেন্স দাও','৩০০ টাকা রিচার্জ করে দাও','নতুন রিচার্জ'],
   pack: ['কম দামের কি আছে','সস্তা প্যাক দেখাও','৩০ দিনের ইন্টারনেট প্যাক','৫০ টাকার ক্যাম্পেইন কি আছে','৪০ জিবি প্যাক কত টাকা','৭ দিনের মিনিট প্যাক','রোমিং প্যাক কি আছে','নতুন অফার কি এসেছে','১০০ টাকার নিচে কি অফার','বান্ডেল অফার গুলো দেখাও','বেশি জিবির প্যাক কোনটা','মাসিক ডাটা প্যাক','এই নাম্বারে কোন অফার আছে','কাস্টমার কোন অফার পাবে','আজকের ক্যাম্পেইন লিস্ট','সবচেয়ে সস্তা ইন্টারনেট','টকটাইম অফার দেখাও','এক দিনের প্যাক','মাই জিপি অফার কি আছে','কোনটায় মেয়াদ বেশি','দামি প্যাক দেখাও'],
+  sim_sell: ['নতুন সিম বিক্রি করব','একটা সিম বেচতে চাই','কাস্টমার নতুন সিম নিবে','সিম রেজিস্ট্রেশন করব','বায়োমেট্রিক করে সিম দাও','সিম হারিয়ে গেছে রিপ্লেস করব','সিম রিপ্লেসমেন্ট করতে চাই','আমার কাছে কয়টা সিম স্টকে আছে','নতুন কানেকশন দিতে চাই','ই-সিম চালু করব','সিম বিক্রির স্ক্রিন খোলো','কাস্টমারের নামে সিম তুলব','নষ্ট সিম বদলাতে হবে','সিমকার্ড বিক্রি','প্রিপেইড সিম দাও'],
   recharge_history: ['আজকে কয়টা রিচার্জ করলাম','রিচার্জ হিস্ট্রি দেখাও','আজকের রিচার্জের তালিকা','গতকাল কত টাকা রিচার্জ করেছি','শেষ রিচার্জ কোনটা ছিল','এই নাম্বারে আগে কত রিচার্জ হয়েছে','আমার লেনদেন দেখাও','স্টেটমেন্ট দেখাও','এই সপ্তাহে মোট কত রিচার্জ হলো','কোন কোন নাম্বারে রিচার্জ করেছি','আজকে মোট কত টাকার লোড দিলাম','ট্রানজেকশন হিস্ট্রি','আগের রিচার্জগুলো দেখি','এই মাসের রিচার্জ রিপোর্ট','গত রিচার্জ সফল হয়েছিল কিনা দেখি'],
   complaint: ['রিচার্জ হয় না কেন','টাকা কেটে গেছে কিন্তু রিচার্জ হয়নি','অফার চালু হয়নি','প্যাক কিনেছি কিন্তু পায়নি','কমিশন আসেনি','অ্যাপ কাজ করছে না','রিচার্জ ফেইল হয়েছে','কাস্টমার বলছে ইন্টারনেট পাচ্ছে না','ভুল নাম্বারে রিচার্জ হয়ে গেছে','টাকা ফেরত চাই','ব্যালেন্স কেটে নিয়েছে','লেনদেন আটকে আছে','অভিযোগ করতে চাই','রিচার্জে সমস্যা হচ্ছে','কমিশন কম দিয়েছে','সার্ভার ডাউন নাকি'],
   out_of_scope: ['আজকে আবহাওয়া কেমন','খেলার স্কোর কত','তুমি কে','একটা গান শোনাও','হ্যালো','ধন্যবাদ','আমার দোকান খোলা','কয়টা বাজে','খবর কি','ভাত খেয়েছ','নামাজের সময় কখন','জোকস বলো'],
 };
-const M_LABEL = {commission:'কমিশন', recharge:'রিচার্জ করা', recharge_history:'রিচার্জ হিস্ট্রি', pack:'প্যাক / অফার', complaint:'অভিযোগ', out_of_scope:'বুঝতে পারিনি'};
+const M_LABEL = {commission:'কমিশন', recharge:'রিচার্জ করা', recharge_history:'রিচার্জ হিস্ট্রি', sim_sell:'সিম বিক্রি', pack:'প্যাক / অফার', complaint:'অভিযোগ', out_of_scope:'বুঝতে পারিনি'};
+// Intents the user created in the training panel (kept on this phone).
+const customIntents = () => store.get('customIntents', []);
+for (const ci of customIntents()){
+  M_LABEL[ci.id] = ci.bn;
+  if (ci.words && ci.words.length && !INTENTS.some(i => i.id === ci.id)) INTENTS.push({id: ci.id, bn: ci.bn, words: ci.words.map(w => w.normalize('NFC')), prio: 1.2});
+}
 // NOT calibrated yet: e5 scores sit in a narrow high band. Adjust after testing ~100 real sentences.
 const M_ACCEPT = 0.86, M_ASK = 0.82, M_MARGIN = 0.012;
 const MODEL_ID = 'Xenova/multilingual-e5-small';
@@ -808,24 +872,28 @@ async function modelStep(raw, ctx, ruleRes){
   if (my !== modelRun) return;
   const best = {}, near = {};
   for (const r of index){ const s = dot(q, r.vec); if (best[r.intent] == null || s > best[r.intent]){ best[r.intent] = s; near[r.intent] = r; } }
-  const ranked = Object.entries(best).sort((a, b) => b[1] - a[1]);
+  const useHead = modelMode === 'head' && head;
+  const hp = useHead ? headProbs(q) : null;
+  const scores = useHead ? Object.fromEntries(head.labels.map((l, i) => [l, hp.at(i)])) : best;
+  const ranked = Object.entries(scores).filter(([id]) => M_LABEL[id]).sort((a, b) => b[1] - a[1]);
   const [topId, topS] = ranked[0], second = ranked[1] ? ranked[1][1] : 0, margin = topS - second;
+  const ACC = useHead ? H_ACCEPT : M_ACCEPT, ASK = useHead ? H_ASK : M_ASK, MAR = useHead ? H_MARGIN : M_MARGIN;
   let decision, tag;
-  if (topId === 'out_of_scope' || topS < M_ASK){ decision = 'fallback'; tag = '<span class="tag warn">ফলব্যাক</span>'; }
-  else if (topS >= M_ACCEPT && margin >= M_MARGIN){ decision = 'route'; tag = '<span class="tag ok">সরাসরি উত্তর</span>'; }
+  if (topId === 'out_of_scope' || topS < ASK){ decision = 'fallback'; tag = '<span class="tag warn">ফলব্যাক</span>'; }
+  else if (topS >= ACC && margin >= MAR){ decision = 'route'; tag = '<span class="tag ok">সরাসরি উত্তর</span>'; }
   else { decision = 'ask'; tag = '<span class="tag warn">রিটেইলারকে জিজ্ঞেস</span>'; }
-  const min = Math.min(...ranked.map(r => r[1])), span = Math.max(1e-6, topS - min);
+  const min = useHead ? 0 : Math.min(...ranked.map(r => r[1])), span = Math.max(1e-6, topS - min);
   const bars = ranked.map(([id, s]) => `<div class="sb"><span class="n">${esc(M_LABEL[id])}</span><span class="tr"><i style="width:${Math.max(4, Math.round(100 * (s - min) / span))}%"></i></span><span class="v">${s.toFixed(3)}</span></div>`).join('');
   const sub = decision === 'route' ? subFor(topId, ctx.modelText ? toks(ctx.modelText).filter(w => !FILLER.has(w)).join(' ') : text, {...ctx, warnings: []}) : decision === 'ask' ? 'অপশন দেখাও: ' + ranked.filter(r => r[0] !== 'out_of_scope').slice(0, 3).map(r => M_LABEL[r[0]]).join(' / ') : 'টাইপ বক্স দেখাও';
   const agree = ruleRes.intent === (decision === 'fallback' ? null : topId);
   const fb = Object.keys(M_LABEL).map(id => `<button data-fb="${id}">${esc(M_LABEL[id])}</button>`).join('');
   slot.innerHTML = `<div class="st final"><div class="rail"><div class="dot">e5</div><div class="line"></div></div><div class="sc">
-    <div class="sh"><span class="sn">ইন্টেন্ট (মডেল)</span><span class="se">Embedding similarity</span>${tag}</div>
+    <div class="sh"><span class="sn">ইন্টেন্ট (মডেল)</span><span class="se">${useHead ? 'Trained head · probability' : 'Embedding similarity'}</span>${tag}</div>
     <div class="big-intent">${esc(M_LABEL[topId])} <span class="se">(${topId})</span></div>
     <div class="bn">${esc(sub)}</div>
     <div class="sbars">${bars}</div>
-    <div class="near">সবচেয়ে কাছের উদাহরণ: “${esc(near[topId].text)}”${near[topId].mine ? ' (তোমার যোগ করা)' : ''} · margin ${margin.toFixed(3)}</div>
-    <div class="se">${agree ? 'রুল আর মডেল একমত।' : 'রুল বলছে: ' + esc(ruleRes.label) + '। মডেল আর রুল আলাদা।'} সীমা এখনো ঠিক করা হয়নি (accept ${M_ACCEPT}, ask ${M_ASK}).</div>
+    <div class="near">${near[topId] ? `সবচেয়ে কাছের উদাহরণ: “${esc(near[topId].text)}”${near[topId].mine ? ' (তোমার যোগ করা)' : ''} · ` : ''}margin ${margin.toFixed(3)}</div>
+    <div class="se">${agree ? 'রুল আর মডেল একমত।' : 'রুল বলছে: ' + esc(ruleRes.label) + '। মডেল আর রুল আলাদা।'} সীমা এখনো ঠিক করা হয়নি (accept ${ACC}, ask ${ASK}).</div>
     <div class="lbl" style="margin-top:4px">ঠিক ইন্টেন্ট কোনটা? ট্যাপ করলে বাক্যটা মডেলের উদাহরণে যোগ হবে</div>
     <div class="fb" id="fbRow">${fb}</div>
   </div></div>`;
@@ -847,6 +915,135 @@ $('mExport').onclick = async () => {
   catch(_){ $('raw').textContent = data; $('rawBox').hidden = false; $('rawBox').open = true; $('mInfo').textContent = 'কপি হয়নি; উপরের "Raw API response" বক্সে দেখানো হলো, সেখান থেকে কপি করো।'; }
 };
 $('mClear').onclick = () => { store.set('myExamples', []); index = index.filter(r => !r.mine); mInfo(); };
+// ================= Training: add sentences, new intents, train a softmax head on e5 vectors =================
+// Probability thresholds for the trained head (also NOT calibrated; check on real queries).
+const H_ACCEPT = 0.6, H_ASK = 0.35, H_MARGIN = 0.2;
+let modelMode = 'sim', head = null;   // head: {labels, W: Float32Array[K*D], b: Float32Array[K], D}
+
+function softmaxRow(z){ const m = Math.max(...z); const e = z.map(v => Math.exp(v - m)); const s = e.reduce((a, b) => a + b, 0); return e.map(v => v / s); }
+function headProbs(x){ const {W, b, D, labels} = head; const z = labels.map((_, k) => { let s = b[k]; for (let d = 0; d < D; d++) s += W[k * D + d] * x[d]; return s; }); return softmaxRow(z); }
+// Multinomial logistic regression, full-batch gradient descent, class-balanced, L2. Small and deterministic.
+function trainSoftmax(X, y, K, {epochs = 300, lr = 4, l2 = 1e-4} = {}){
+  const n = X.length, D = X[0].length, W = new Float32Array(K * D), b = new Float32Array(K);
+  const cnt = new Array(K).fill(0); y.forEach(c => cnt[c]++);
+  const cw = cnt.map(c => c ? n / (K * c) : 0);
+  const gW = new Float32Array(K * D), gb = new Float32Array(K), z = new Float64Array(K);
+  for (let ep = 0; ep < epochs; ep++){
+    gW.fill(0); gb.fill(0);
+    for (let i = 0; i < n; i++){
+      const x = X[i];
+      for (let k = 0; k < K; k++){ let s = b[k]; const o = k * D; for (let d = 0; d < D; d++) s += W[o + d] * x[d]; z[k] = s; }
+      let m = -Infinity; for (let k = 0; k < K; k++) if (z[k] > m) m = z[k];
+      let sum = 0; for (let k = 0; k < K; k++){ z[k] = Math.exp(z[k] - m); sum += z[k]; }
+      for (let k = 0; k < K; k++){
+        const g = cw[y[i]] * (z[k] / sum - (k === y[i] ? 1 : 0)); if (!g) continue;
+        gb[k] += g; const o = k * D; for (let d = 0; d < D; d++) gW[o + d] += g * x[d];
+      }
+    }
+    for (let j = 0; j < W.length; j++) W[j] -= lr * (gW[j] / n + l2 * W[j]);
+    for (let k = 0; k < K; k++) b[k] -= lr * gb[k] / n;
+  }
+  return {W, b, D};
+}
+const predict = (m, x, K) => { let best = 0, bv = -Infinity; for (let k = 0; k < K; k++){ let s = m.b[k]; for (let d = 0; d < m.D; d++) s += m.W[k * m.D + d] * x[d]; if (s > bv){ bv = s; best = k; } } return best; };
+
+function trError(t){ $('trErr').textContent = t; $('trErr').hidden = !t; }
+function trRender(){
+  const mine = myExamples(), custom = new Set(customIntents().map(c => c.id));
+  $('trCounts').innerHTML = Object.keys(M_LABEL).map(id => {
+    const n = (EXAMPLES[id] || []).length + mine.filter(e => e.intent === id).length;
+    return `<span class="${custom.has(id) ? 'new' : ''}">${esc(M_LABEL[id])} · ${n}</span>`;
+  }).join('');
+  const cur = $('trIntent').value;
+  $('trIntent').innerHTML = Object.keys(M_LABEL).map(id => `<option value="${id}">${esc(M_LABEL[id])} (${id})</option>`).join('') + '<option value="__new">+ নতুন ইন্টেন্ট…</option>';
+  if (cur && [...$('trIntent').options].some(o => o.value === cur)) $('trIntent').value = cur;
+  $('trNew').hidden = $('trIntent').value !== '__new';
+  $('trTrain').disabled = !extractor;
+  $('trTrain').title = extractor ? '' : 'আগে উপরে মডেল লোড করো';
+  $('modeHead').disabled = !head;
+}
+$('trIntent').onchange = () => { $('trNew').hidden = $('trIntent').value !== '__new'; trError(''); };
+
+$('trAdd').onclick = async () => {
+  trError('');
+  let intent = $('trIntent').value;
+  const lines = $('trText').value.split('\n').map(l => l.trim()).filter(Boolean);
+  if (intent === '__new'){
+    const nid = $('trNewId').value.trim().toLowerCase(), bn = $('trNewBn').value.trim();
+    if (!/^[a-z][a-z0-9_]{2,30}$/.test(nid)) return trError('আইডি ইংরেজি ছোট হাতের অক্ষরে দাও, যেমন balance_check (৩–৩১ অক্ষর, _ চলবে)।');
+    if (M_LABEL[nid]) return trError(`"${nid}" নামে ইন্টেন্ট আগেই আছে। উপরের তালিকা থেকে বেছে নাও।`);
+    if (!bn) return trError('ইন্টেন্টের বাংলা নাম দাও।');
+    if (lines.length < 5) return trError('নতুন ইন্টেন্টে অন্তত ৫টা উদাহরণ বাক্য দাও, ভালো হয় ১৫–২০টা।');
+    const words = $('trNewWords').value.split(/[,،]/).map(w => w.trim()).filter(Boolean);
+    const list = customIntents(); list.push({id: nid, bn, words}); store.set('customIntents', list);
+    M_LABEL[nid] = bn;
+    if (words.length) INTENTS.push({id: nid, bn, words: words.map(w => w.normalize('NFC')), prio: 1.2});
+    intent = nid; ['trNewId', 'trNewBn', 'trNewWords'].forEach(k => $(k).value = '');
+  } else if (!lines.length) return trError('অন্তত একটা বাক্য লেখো।');
+  const mine = myExamples(); const added = [];
+  for (const raw of lines){ const text = cleanForModel(raw); if (!mine.some(x => x.text === text && x.intent === intent)){ mine.push({text, intent}); added.push(text); } }
+  store.set('myExamples', mine);
+  if (extractor && added.length){ const vecs = await embed(added); added.forEach((text, i) => index.push({intent, text, mine: true, vec: vecs[i]})); }
+  $('trText').value = '';
+  trRender(); mInfo();
+  $('trResult').innerHTML = `<p class="note">${esc(M_LABEL[intent])}-এ ${added.length}টা বাক্য যোগ হলো${lines.length > added.length ? ` (${lines.length - added.length}টা আগেই ছিল)` : ''}। নতুন ফল পেতে "ট্রেইন করো" চাপো।</p>`;
+  $('trIntent').value = intent; $('trNew').hidden = true;
+};
+
+$('trTrain').onclick = async () => {
+  if (!extractor) return trError('আগে উপরে "মডেল লোড করো" চাপো।');
+  trError(''); $('trTrain').disabled = true;
+  $('trResult').innerHTML = '<p class="note">ট্রেইন হচ্ছে… (৫ ভাগে ভাগ করে যাচাই, তারপর সব ডেটায় চূড়ান্ত ট্রেইনিং)</p>';
+  await new Promise(r => setTimeout(r, 30));
+  const t0 = performance.now();
+  const labelsAll = Object.keys(M_LABEL).filter(id => index.some(r => r.intent === id));
+  const small = labelsAll.filter(id => index.filter(r => r.intent === id).length < 5);
+  const K = labelsAll.length, li = Object.fromEntries(labelsAll.map((l, i) => [l, i]));
+  const rows = index.filter(r => li[r.intent] != null);
+  const X = rows.map(r => r.vec), y = rows.map(r => li[r.intent]);
+  // 5-fold cross-validation, folds assigned round-robin per intent so every fold sees every intent
+  const fold = new Array(rows.length), seen = {};
+  rows.forEach((r, i) => { seen[r.intent] = (seen[r.intent] || 0) + 1; fold[i] = seen[r.intent] % 5; });
+  let correct = 0; const per = labelsAll.map(() => [0, 0]), conf = {};
+  for (let f = 0; f < 5; f++){
+    const tr = [], te = []; fold.forEach((g, i) => (g === f ? te : tr).push(i));
+    if (!te.length) continue;
+    const m = trainSoftmax(tr.map(i => X[i]), tr.map(i => y[i]), K);
+    for (const i of te){ const p = predict(m, X[i], K); per[y[i]][1]++; if (p === y[i]){ correct++; per[y[i]][0]++; } else { const k = labelsAll[y[i]] + ' → ' + labelsAll[p]; conf[k] = (conf[k] || 0) + 1; } }
+    await new Promise(r => setTimeout(r, 0));
+  }
+  const final = trainSoftmax(X, y, K);
+  head = {labels: labelsAll, ...final};
+  const acc = correct / rows.length, ms = Math.round(performance.now() - t0);
+  modelMode = 'head'; setMode('head');
+  const perRows = labelsAll.map((l, i) => `<tr><td>${esc(M_LABEL[l])}</td><td class="m">${per[i][0]}/${per[i][1]}</td><td class="m">${per[i][1] ? Math.round(100 * per[i][0] / per[i][1]) + '%' : '—'}</td></tr>`).join('');
+  const top = Object.entries(conf).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  $('trResult').innerHTML = `
+    <div class="tr-stat"><b>${Math.round(acc * 100)}%</b><span class="note">ঠিক, ${rows.length}টা বাক্যে ৫-ভাগ যাচাই (cross-validation) · ${K}টা ইন্টেন্ট · ${(ms / 1000).toFixed(1)} সেকেন্ড</span></div>
+    <div class="kb-wrap"><table class="kb-tbl"><thead><tr><th>ইন্টেন্ট</th><th>ঠিক / মোট</th><th>%</th></tr></thead><tbody>${perRows}</tbody></table></div>
+    ${top.length ? `<p class="note">সবচেয়ে বেশি গুলিয়েছে: ${top.map(([k, v]) => esc(k) + ' (' + v + ')').join(', ')}। এই দুই ইন্টেন্টে আরও আলাদা ধরনের বাক্য যোগ করো।</p>` : ''}
+    ${small.length ? `<p class="note">${small.map(id => esc(M_LABEL[id])).join(', ')}-এ ৫টার কম বাক্য, ফল নির্ভরযোগ্য না।</p>` : ''}
+    <p class="note">এই সংখ্যা শুধু আমাদের লেখা উদাহরণের উপর, তাই বাস্তবের চেয়ে বেশি দেখায়। আসল মাপ হবে রিটেইলারদের রেকর্ড করা প্রশ্নে।</p>`;
+  try { store.set('head', {labels: head.labels, W: Array.from(head.W, v => +v.toFixed(5)), b: Array.from(head.b), D: head.D, acc, n: rows.length, at: new Date().toISOString()}); } catch(_){}
+  $('trTrain').disabled = false; trRender();
+  const last = $('pipeSrc').textContent.replace(/^“|”$/g, ''); if (last) runPipeline(last);
+};
+
+function setMode(m){
+  modelMode = m === 'head' && head ? 'head' : 'sim';
+  $('modeSim').setAttribute('aria-pressed', String(modelMode === 'sim'));
+  $('modeHead').setAttribute('aria-pressed', String(modelMode === 'head'));
+  store.set('modelMode', modelMode);
+}
+$('modeSim').onclick = () => { setMode('sim'); const l = $('pipeSrc').textContent.replace(/^“|”$/g, ''); if (l) runPipeline(l); };
+$('modeHead').onclick = () => { setMode('head'); const l = $('pipeSrc').textContent.replace(/^“|”$/g, ''); if (l) runPipeline(l); };
+(() => { const h = store.get('head', null);
+  if (h && h.labels && h.labels.every(l => M_LABEL[l])){ head = {labels: h.labels, W: Float32Array.from(h.W), b: Float32Array.from(h.b), D: h.D};
+    $('trResult').innerHTML = `<p class="note">আগের ট্রেইনিং লোড হয়েছে: ${Math.round(h.acc * 100)}% ঠিক, ${h.n}টা বাক্যে (${new Date(h.at).toLocaleString()})। নতুন বাক্য যোগ করলে আবার ট্রেইন করো।</p>`;
+    if (store.get('modelMode', 'sim') === 'head') setMode('head'); } })();
+trRender();
+const _origMInfo = mInfo;
+mInfo = function(){ _origMInfo(); trRender(); };
 if (store.get('modelWanted', false)) setTimeout(loadModel, 500);
 
 // ================= Side menu: rules and corpus, rendered from the live code =================
