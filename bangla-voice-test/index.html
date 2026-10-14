@@ -217,6 +217,11 @@ textarea.tr-in{resize:vertical;line-height:1.6}
     <div class="samples" id="samples"></div>
   </section>
 
+  <section aria-label="Pipeline" id="pipeWrap" hidden style="display:flex;flex-direction:column;gap:0">
+    <div class="lbl" style="margin-bottom:8px">Pipeline for: <span id="pipeSrc" class="bn" style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink)"></span></div>
+    <div id="pipe"></div>
+  </section>
+
   <section class="card" aria-label="Intent model">
     <div class="lbl">ইন্টেন্ট মডেল · multilingual-e5-small</div>
     <p class="note" id="mStatus">লোড হয়নি। প্রথমবার প্রায় ১২০ MB ডাউনলোড হবে, তারপর ফোনে ক্যাশে থাকবে। Wi-Fi-তে লোড করো।</p>
@@ -259,11 +264,6 @@ textarea.tr-in{resize:vertical;line-height:1.6}
       </span>
     </div>
     <div id="trResult" aria-live="polite"></div>
-  </section>
-
-  <section aria-label="Pipeline" id="pipeWrap" hidden style="display:flex;flex-direction:column;gap:0">
-    <div class="lbl" style="margin-bottom:8px">Pipeline for: <span id="pipeSrc" class="bn" style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink)"></span></div>
-    <div id="pipe"></div>
   </section>
 
   <section aria-label="History" style="display:flex;flex-direction:column;gap:8px">
@@ -317,7 +317,7 @@ function showResult({text, alts, ms, conf, engineName, raw}){
   $('alts').innerHTML = alts.length > 1 ? '<div class="lbl">Other guesses</div>' + alts.slice(1).map(a => `<div class="alt"><span>${esc(a.t)}</span><span>${a.c!=null?a.c.toFixed(2):'—'}</span></div>`).join('') : '';
   if (raw){ $('raw').textContent = JSON.stringify(raw, null, 2); $('rawBox').hidden = false; } else $('rawBox').hidden = true;
   if (text.trim()){
-    try { runPipeline(text); } catch(e){ console.error(e); }
+    try { runPipeline(text); setTimeout(() => $('pipeWrap').scrollIntoView({behavior: 'smooth', block: 'start'}), 150); } catch(e){ console.error(e); }
     history.unshift({text, conf, ms, engine: engineName, lang, at: new Date().toISOString()});
     history = history.slice(0, 20); store.set('history', history); renderHist();
   }
