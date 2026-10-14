@@ -88,6 +88,31 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .kv dd{margin:0;font-family:var(--f-bn)}
 .big-intent{font-size:20px;font-weight:600;font-family:var(--f-bn)}
 .warnline{font-size:13px;color:var(--warn)}
+.kb-scrim{position:fixed;inset:0;background:rgba(10,14,22,.45);z-index:20}
+.kb{position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);background:var(--bg);border-left:1px solid var(--line);z-index:21;overflow-y:auto;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+.kb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.kb-toc{display:flex;flex-wrap:wrap;gap:6px}
+.kb-toc a{font-family:var(--f-bn);font-size:12.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);text-decoration:none}
+.kb-body{display:flex;flex-direction:column;gap:10px}
+.kb-sec{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.kb-sec>summary{list-style:none;cursor:pointer;padding:11px 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.kb-sec>summary::-webkit-details-marker{display:none}
+.kb-sec>summary::before{content:'▸';color:var(--muted);font-size:12px}
+.kb-sec[open]>summary::before{content:'▾'}
+.kb-sec .t{font-weight:600;font-family:var(--f-bn)}
+.kb-sec .c{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.kb-in{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.kb-in p{margin:0;font-size:13px;color:var(--muted)}
+.kb-tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.kb-tbl th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)}
+.kb-tbl td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top;font-family:var(--f-bn)}
+.kb-tbl td.m{font-family:var(--f-mono);font-size:12px}
+.kb-wrap{overflow-x:auto}
+.kb-chips{display:flex;flex-wrap:wrap;gap:5px}
+.kb-chips span{font-family:var(--f-bn);font-size:13px;padding:1px 8px;border-radius:6px;background:var(--sunk);border:1px solid var(--line)}
+.kb-chips span.mine{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.kb-hit{outline:2px solid var(--warn);outline-offset:1px;border-radius:4px}
+.kb-hide{display:none!important}
 .pbar{height:8px;border-radius:4px;background:var(--sunk);border:1px solid var(--line);overflow:hidden}
 .pbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .sbars{display:flex;flex-direction:column;gap:5px}
@@ -103,10 +128,30 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 </style>
 </head>
 <body>
+<div class="kb-scrim" id="kbScrim" hidden></div>
+<aside class="kb" id="kb" aria-label="Rules and corpus" hidden>
+  <div class="kb-head">
+    <div>
+      <div class="lbl">যা কোডে লেখা আছে</div>
+      <h2 style="margin:2px 0 0;font-size:18px;font-weight:600">রুল ও কর্পাস</h2>
+    </div>
+    <button class="btn" id="kbClose" aria-label="Close">✕</button>
+  </div>
+  <p class="note">সব তালিকা পেজের কোড থেকেই সরাসরি দেখানো হচ্ছে, তাই যা দেখছ ঠিক তাই চলছে। ক্রম = পাইপলাইনে যে ক্রমে চলে।</p>
+  <label for="kbFind" class="lbl" style="margin-top:4px">খোঁজো</label>
+  <input id="kbFind" type="text" autocomplete="off" placeholder="যেমন: রোমিং" style="font-family:var(--f-bn)">
+  <nav class="kb-toc" id="kbToc" aria-label="Sections"></nav>
+  <div id="kbBody" class="kb-body"></div>
+</aside>
 <div class="wrap">
   <header style="display:flex;flex-direction:column;gap:4px">
-    <h1>Bangla voice test</h1>
-    <p class="sub">Step 1 of the retailer voice search: speak in Bengali, see the text Google returns.</p>
+    <div class="row" style="justify-content:space-between;flex-wrap:nowrap">
+      <h1>Bangla voice test</h1>
+      <button class="btn" id="kbOpen" aria-controls="kb" aria-expanded="false" style="flex-shrink:0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-3px;margin-right:4px"><path d="M4 6h16M4 12h16M4 18h16"/></svg>রুল ও কর্পাস
+      </button>
+    </div>
+    <p class="sub">Speak in Bengali, see the text, then every filter and the intent step by step.</p>
   </header>
 
   <section class="card" aria-label="Settings">
@@ -786,6 +831,105 @@ $('mExport').onclick = async () => {
 };
 $('mClear').onclick = () => { store.set('myExamples', []); index = index.filter(r => !r.mine); mInfo(); };
 if (store.get('modelWanted', false)) setTimeout(loadModel, 500);
+
+// ================= Side menu: rules and corpus, rendered from the live code =================
+function kbRender(){
+  const chips = (arr, mineSet) => `<div class="kb-chips">${arr.map(x => `<span class="${mineSet && mineSet.has(x) ? 'mine' : ''}">${esc(x)}</span>`).join('')}</div>`;
+  const table = (head, rows) => `<div class="kb-wrap"><table class="kb-tbl"><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => typeof c === 'object' ? `<td class="m">${esc(c.m)}</td>` : `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const sec = (id, title, count, body, open) => `<details class="kb-sec" id="kb-${id}"${open ? ' open' : ''}><summary><span class="t">${esc(title)}</span><span class="c">${esc(count)}</span></summary><div class="kb-in">${body}</div></details>`;
+
+  const extraBad = (() => { try { return JSON.parse(localStorage.getItem('badWords') || '[]'); } catch(_) { return []; } })();
+  const mine = myExamples();
+  const S = [];
+
+  S.push(['order', 'পাইপলাইনের ক্রম', FILTERS.length + 'টা ফিল্টার + ইন্টেন্ট',
+    `<ol style="margin:0;padding-left:20px;font-family:var(--f-bn);font-size:14px;display:flex;flex-direction:column;gap:3px">${FILTERS.map(f => `<li>${esc(f.bn)} <span class="se">· ${esc(f.en)}</span></li>`).join('')}<li>ইন্টেন্ট: কিওয়ার্ড রুল <span class="se">· আর মডেল লোড থাকলে e5 embedding</span></li></ol>`, true]);
+
+  S.push(['alias', 'বানান অভিধান', Object.values(ALIASES).reduce((n, a) => n + a.length, 0) + 'টা ভুল রূপ',
+    `<p>বাঁ দিকের যেকোনো রূপ এলে ডান দিকের সঠিক শব্দে বদলায়। শেষে প্রত্যয় থাকলেও (রমিংয়ের → রোমিংয়ের)।</p>` +
+    table(['সঠিক শব্দ', 'যে রূপগুলো ধরা হয়'], Object.entries(ALIASES).map(([k, v]) => [k, v.join(', ')]))]);
+
+  S.push(['fuzzy', 'কাছের শব্দ খোঁজার নিয়ম', 'Levenshtein + উচ্চারণ-key',
+    `<p>অভিধানে না থাকলে, নিচের দরকারি শব্দগুলোর মধ্যে সবচেয়ে কাছেরটায় ম্যাপ হয় ("(আনুমানিক)" লেখা থাকে)।</p>` +
+    table(['নিয়ম', 'মান'], [
+      ['উচ্চারণ-key', 'ী→ি, ূ→ু, শ/ষ→স, ণ→ন, য→জ, ড়/ঢ়→র, য-ফলা/হসন্ত/চন্দ্রবিন্দু বাদ, ৈ→ে, ৌ→ো'],
+      ['কতটা আলাদা হলে চলবে', '৬+ অক্ষরে ২টা, তার কম হলে ১টা অক্ষর'],
+      ['ন্যূনতম দৈর্ঘ্য', '৪ অক্ষরের (key) কম হলে আন্দাজ না'],
+      ['টাই হলে', 'দুটো শব্দ সমান কাছে হলে আন্দাজ না'],
+      ['কখনো বদলায় না', 'নাম/ব্র্যান্ড (protected)'],
+    ]) + `<div class="lbl">যে শব্দগুলোতে ম্যাপ হতে পারে (${VOCAB_SET().size})</div>` + chips([...VOCAB_SET()])]);
+
+  S.push(['banglish', 'বাংলিশ → বাংলা', Object.keys(BANGLISH).length + 'টা শব্দ',
+    `<p>৪+ অক্ষরের অচেনা ইংরেজি শব্দ ১–২ অক্ষর ভুল হলেও কাছেরটায় ম্যাপ হয় (commisn → কমিশন)।</p>` +
+    table(['বাংলিশ', 'বাংলা'], Object.entries(BANGLISH).map(([k, v]) => [{m: k}, v]))]);
+
+  S.push(['numwords', 'সংখ্যার শব্দ', Object.keys(NUM_WORDS).length + 'টা',
+    `<p>"নয়" আর "হাজার" ইচ্ছা করে বাদ: "নয়" মানে "না"-ও হয়, "হাজার" গুণ করতে হয়।</p>` +
+    table(['শব্দ', 'অঙ্ক'], Object.entries(NUM_WORDS).map(([k, v]) => [k, {m: String(v)}]))]);
+
+  S.push(['entities', 'নাম ও ব্র্যান্ড', ENTITIES.length + 'টা',
+    `<p>বানান ঠিক করার আগে চলে, তাই "জিপি" কখনো "জিবি" হয় না।</p>` +
+    table(['নাম', 'যে রূপগুলো ধরা হয়'], ENTITIES.map(([c, v]) => [c, v.join(', ')]))]);
+
+  S.push(['bad', 'অশালীন শব্দ', (BAD_WORDS_BASE.length + extraBad.length) + 'টা',
+    `<p>মুছে ফেলা হয়, প্রশ্ন বাতিল হয় না। প্রত্যয় সহ আর ৫+ অক্ষরে ১ অক্ষর ভুল পর্যন্ত ধরে; Google-এর "***" দেওয়া শব্দও বাদ। লগে শব্দ যায় না, শুধু সংখ্যা।</p>` +
+    `<details><summary class="se" style="cursor:pointer">তালিকা দেখাও</summary>${chips([...BAD_WORDS_BASE, ...extraBad])}</details>`]);
+
+  S.push(['filler', 'অপ্রয়োজনীয় শব্দ', FILLER.size + 'টা',
+    `<p>শুধু রুল দিয়ে মেলানোর জন্য বাদ যায়। মডেল পুরো বাক্য পায়।</p>` + chips([...FILLER])]);
+
+  S.push(['slots', 'সংখ্যা বের করার নিয়ম', 'regex',
+    table(['কী', 'কীভাবে ধরা হয়', 'যাচাই'], [
+      ['টাকা (price)', 'সংখ্যা + টাকা…; পরে "নিচে/কম/মধ্যে" থাকলে price_max', '১০–৫০০০; একক না থাকলে সংখ্যাটাকে টাকা ধরে সতর্কবার্তা'],
+      ['মেয়াদ (validity_days)', 'সংখ্যা + দিন…, বা সংখ্যা + মাস… (×৩০)', '১–৩৬৫'],
+      ['ডাটা (data_gb)', 'সংখ্যা + জিবি…, বা সংখ্যা + এমবি… (÷১০২৪)', '—'],
+      ['মিনিট', 'সংখ্যা + মিনিট…', '—'],
+      ['নাম্বার (msisdn)', '01[3-9] + ৮ ডিজিট, স্পেস চলবে, +88 বাদ', '১১ ডিজিট না হলে সতর্কবার্তা; সবসময় মাস্ক'],
+    ])]);
+
+  S.push(['intents', 'ইন্টেন্টের কিওয়ার্ড (রুল)', INTENTS.length + 'টা ইন্টেন্ট',
+    `<p>শব্দের শুরু মিললেই ধরে (কমিশনের → কমিশন)। একাধিক মিললে অগ্রাধিকার বেশি যেটার।</p>` +
+    table(['ইন্টেন্ট', 'অগ্রাধিকার', 'কিওয়ার্ড'], [...INTENTS].sort((a, b) => b.prio - a.prio).map(it => [it.bn + ' (' + it.id + ')', {m: String(it.prio)}, it.words.join(', ')])) +
+    `<div class="lbl">ইন্টেন্টের শব্দ না থাকলে, এগুলো থাকলে → প্যাক</div>` + chips(PACK_ATTR_WORDS) +
+    `<p>সাজানোর ক্রম: সস্তা / কম দাম → দাম কম থেকে; দামি / বেশি দাম → দাম বেশি থেকে; বেশি জিবি → জিবি আগে; বেশি দিন/মেয়াদ → মেয়াদ আগে।</p>`]);
+
+  const exCount = Object.values(EXAMPLES).reduce((n, a) => n + a.length, 0);
+  S.push(['examples', 'মডেলের উদাহরণ বাক্য', exCount + ' + তোমার ' + mine.length + 'টা',
+    `<p>মডেল প্রতিটা প্রশ্ন এই বাক্যগুলোর অর্থের সাথে মেলায়। সবুজ = তুমি "ঠিক ইন্টেন্ট" বাটনে যোগ করেছ।</p>` +
+    Object.keys(M_LABEL).map(id => {
+      const base = EXAMPLES[id] || [], my = mine.filter(e => e.intent === id).map(e => e.text);
+      return `<div class="lbl">${esc(M_LABEL[id])} · ${base.length + my.length}</div>` + chips([...base, ...my], new Set(my));
+    }).join('')]);
+
+  S.push(['model', 'মডেল আর সীমা', MODEL_ID.split('/')[1],
+    table(['কী', 'মান'], [
+      ['মডেল', {m: MODEL_ID + ' (q8, ~118 MB)'}],
+      ['লাইব্রেরি', {m: 'transformers.js 3.0.2'}],
+      ['পদ্ধতি', 'প্রতিটা উদাহরণের সাথে cosine similarity; ইন্টেন্টের স্কোর = সবচেয়ে কাছের উদাহরণের স্কোর'],
+      ['সরাসরি উত্তর', {m: 'score ≥ ' + M_ACCEPT + ' এবং margin ≥ ' + M_MARGIN}],
+      ['রিটেইলারকে জিজ্ঞেস', {m: M_ASK + ' ≤ score < ' + M_ACCEPT}],
+      ['ফলব্যাক', {m: 'score < ' + M_ASK + ', বা out_of_scope'}],
+      ['অবস্থা', 'সীমাগুলো আন্দাজ, ঠিক করা হয়নি; মডেল ট্রেইন করা হয়নি'],
+    ])]);
+
+  $('kbToc').innerHTML = S.map(([id, t]) => `<a href="#kb-${id}" data-kb="${id}">${esc(t)}</a>`).join('');
+  $('kbBody').innerHTML = S.map(([id, t, c, b, o]) => sec(id, t, c, b, o)).join('');
+}
+function kbOpen(){ kbRender(); $('kb').hidden = false; $('kbScrim').hidden = false; $('kbOpen').setAttribute('aria-expanded', 'true'); document.body.style.overflow = 'hidden'; $('kbClose').focus(); }
+function kbClose(){ $('kb').hidden = true; $('kbScrim').hidden = true; $('kbOpen').setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; $('kbOpen').focus(); }
+$('kbOpen').onclick = kbOpen; $('kbClose').onclick = kbClose; $('kbScrim').onclick = kbClose;
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('kb').hidden) kbClose(); });
+$('kbToc').addEventListener('click', e => { const a = e.target.closest('[data-kb]'); if (!a) return; e.preventDefault(); const d = $('kb-' + a.dataset.kb); d.open = true; d.scrollIntoView({behavior: 'smooth', block: 'start'}); });
+$('kbFind').addEventListener('input', e => {
+  const q = e.target.value.trim().normalize('NFC').toLowerCase();
+  document.querySelectorAll('.kb-sec').forEach(sec => {
+    const items = sec.querySelectorAll('.kb-chips span, .kb-tbl tbody tr');
+    let any = false;
+    items.forEach(el => { const hit = q && el.textContent.toLowerCase().includes(q); el.classList.toggle('kb-hit', !!hit); if (hit) any = true; });
+    sec.classList.toggle('kb-hide', !!q && !any && !sec.querySelector('.kb-in').textContent.toLowerCase().includes(q));
+    if (q && any) sec.open = true;
+  });
+});
 
 const SAMPLES = ['আজকে কমিসন বেশি কোন পেকে','রমিং প্যাক কি আছে','০১৭১১ ২২৩৩৪৪ নাম্বারে উনপঞ্চাশ টাকা রিচার্জ দাও','৩০ দিনের ৪০ জিবি কত টাকা','৫০ টাকা রিচার্জে কমিশন কত','ajke roaming offer ache','ভাই ১০০ টাকার নিচে ইন্টারনেট অফার','০১৭১১২২৩৩ এ রিচার্জ করো','আজকে বৃষ্টি হবে নাকি'];
 $('samples').innerHTML = SAMPLES.map((s,i) => `<button class="sample" data-s="${i}">${esc(s)}</button>`).join('');
