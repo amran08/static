@@ -1,0 +1,3359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dhaka Rickshaw Run</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Da+2:wght@500;600;800&family=Hind+Siliguri:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<style>
+  /* Layout: full-bleed canvas street, HUD chips on top, rickshaw-art "plate" panels for menus.
+     Single committed dusk look (Dhaka street at maghrib), so one dark palette only. */
+  :root {
+    --night: #151026;
+    --green: #008a5c;
+    --green-deep: #05442f;
+    --yellow: #ffd21f;
+    --red: #e8322b;
+    --paper: #fff4d6;
+    --ink: #140f1f;
+    --sky: #7fd7ff;
+    --volt: #3ee07a;
+    --display: 'Baloo Da 2', 'Hind Siliguri', system-ui, sans-serif;
+    --body: 'Hind Siliguri', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color-scheme: dark;
+  }
+  html { height: 100%; box-sizing: border-box; }
+  body { height: 100%; background: var(--night); color: var(--paper); font-family: var(--body); overflow: hidden; }
+
+  #game { position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .layer {
+    position: absolute; inset: 0; pointer-events: none;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  /* ---------- HUD ---------- */
+  .hud { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding-block: 12px 0; }
+  .chip {
+    background: rgba(12, 8, 24, 0.74); border: 2px solid rgba(255, 210, 31, 0.5);
+    border-radius: 14px; padding: 6px 12px 8px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  }
+  .label { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 244, 214, 0.72); font-weight: 600; }
+  .big { font-family: var(--display); font-weight: 800; font-size: 1.7rem; line-height: 1; color: var(--yellow); font-variant-numeric: tabular-nums; }
+  .big small { font-size: 0.55em; color: var(--paper); margin-left: 2px; }
+  .sub { font-size: 0.72rem; color: rgba(255, 244, 214, 0.7); font-variant-numeric: tabular-nums; }
+
+  .bat { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+  .cells { display: flex; gap: 3px; padding: 3px; border: 2px solid rgba(255, 244, 214, 0.55); border-radius: 6px; }
+  .nub { width: 4px; height: 10px; background: rgba(255, 244, 214, 0.55); border-radius: 0 2px 2px 0; }
+  .cell { width: 9px; height: 15px; border-radius: 2px; background: rgba(255, 255, 255, 0.1); }
+  .cell.on { background: var(--volt); box-shadow: 0 0 6px rgba(62, 224, 122, 0.6); }
+  .low .cell.on { background: var(--red); box-shadow: 0 0 6px rgba(232, 50, 43, 0.7); }
+  .low .cells { animation: blink 0.7s steps(2) infinite; }
+  .pct { font-family: var(--display); font-weight: 800; font-size: 1rem; font-variant-numeric: tabular-nums; min-width: 3.2ch; text-align: right; }
+  .turbo-tag {
+    display: inline-block; margin-top: 4px; font-family: var(--display); font-weight: 800; font-size: 0.7rem; letter-spacing: 0.12em;
+    padding: 0 8px; border-radius: 999px; color: rgba(127, 215, 255, 0.45); border: 1.5px solid rgba(127, 215, 255, 0.3);
+  }
+  .turbo-tag.on { color: var(--ink); background: var(--sky); border-color: var(--sky); box-shadow: 0 0 12px rgba(127, 215, 255, 0.8); }
+  @keyframes blink { 50% { opacity: 0.35; } }
+
+  /* ---------- Touch pad ---------- */
+  .pad {
+    position: absolute; left: 0; right: 0; bottom: 0; display: none; justify-content: space-between; align-items: flex-end; gap: 10px;
+    padding: 0 max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); pointer-events: none;
+  }
+  @media (hover: none), (pointer: coarse) { .pad { display: flex; } }
+  .pbtn {
+    pointer-events: auto; width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(12, 8, 24, 0.62); border: 3px solid rgba(255, 244, 214, 0.55); color: var(--paper);
+    font-size: 1.7rem; touch-action: none; -webkit-tap-highlight-color: transparent;
+  }
+  .pbtn:active, .pbtn.active { background: rgba(255, 210, 31, 0.25); border-color: var(--yellow); }
+  .pbtn.turbo { width: 92px; height: 92px; border-color: var(--sky); color: var(--sky); font-family: var(--display); font-weight: 800; font-size: 0.95rem; letter-spacing: 0.08em; line-height: 1.05; text-align: center; }
+  .pbtn.turbo.active { background: rgba(127, 215, 255, 0.28); box-shadow: 0 0 18px rgba(127, 215, 255, 0.7); }
+  .mid { display: flex; gap: 10px; align-items: flex-end; }
+  .pbtn.horn { width: 58px; height: 58px; font-size: 1.4rem; border-color: rgba(255, 210, 31, 0.6); }
+  .pbtn.fly { width: 66px; height: 66px; border-color: var(--yellow); color: var(--yellow); font-family: var(--display); font-weight: 800; font-size: 0.85rem; line-height: 1.05; text-align: center; }
+  .pbtn.fly.cooling { opacity: 0.45; }
+
+  /* Touch controls v2 */
+  .pad { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 0; padding: 0; pointer-events: none; }
+  @media (hover: none), (pointer: coarse) { .pad { display: block; } }
+  .pad-left { position: absolute; left: max(14px, env(safe-area-inset-left, 0px)); bottom: 14px; display: flex; gap: 12px; }
+  .pad-right { position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); bottom: 14px; width: 158px; height: 150px; pointer-events: none; }
+  .arrow {
+    pointer-events: auto; width: 80px; height: 80px; border-radius: 24px; display: grid; place-items: center;
+    background: rgba(12, 8, 24, 0.62); border: 3px solid rgba(255, 210, 31, 0.75); color: var(--yellow);
+    touch-action: none; -webkit-tap-highlight-color: transparent; transition: transform 0.06s, background 0.06s;
+  }
+  .arrow svg { width: 42px; height: 42px; }
+  .arrow.active { background: var(--yellow); color: var(--ink); transform: scale(0.93); }
+  .arrow:focus-visible { outline: 3px solid var(--paper); outline-offset: 3px; }
+  .pad-right .pbtn { position: absolute; }
+  .pad-right .turbo { right: 0; bottom: 0; width: 90px; height: 90px; }
+  .pad-right .fly { left: 0; bottom: 76px; width: 62px; height: 62px; font-size: 0.8rem; }
+  .pad-right .brake { left: 0; bottom: 0; width: 64px; height: 64px; border-color: #ff6b5e; color: #ff6b5e; font-family: var(--display); font-weight: 800; font-size: 0.78rem; letter-spacing: 0.06em; }
+  .pad-right .brake.active { background: rgba(232, 50, 43, 0.35); box-shadow: 0 0 16px rgba(232, 50, 43, 0.7); }
+  .turbo-tag.brake-tag { color: var(--paper); background: var(--red); border-color: var(--red); box-shadow: 0 0 12px rgba(232, 50, 43, 0.8); }
+  .pad-right .horn { right: 22px; bottom: 100px; width: 46px; height: 46px; font-size: 1.1rem; }
+  .turbo-tag.fly-ready { color: var(--ink); background: var(--yellow); border-color: var(--yellow); }
+  .turbo-tag.fly-air { color: var(--ink); background: var(--paper); border-color: var(--paper); box-shadow: 0 0 12px rgba(255, 244, 214, 0.8); }
+  .sbtn {
+    pointer-events: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; color: var(--paper);
+    background: rgba(12, 8, 24, 0.7); border: 1.5px solid rgba(255, 244, 214, 0.35); border-radius: 999px; padding: 2px 10px;
+  }
+  .sbtn[aria-pressed="true"] { color: rgba(255, 244, 214, 0.55); }
+  .sbtn:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+  .fact { font-size: 0.8rem; border-left: 3px solid var(--yellow); padding-left: 10px; color: rgba(255, 244, 214, 0.82); }
+
+  /* ---------- Menu screens ---------- */
+  .screen {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow-y: auto;
+    padding-block: 16px; pointer-events: auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background: radial-gradient(ellipse at center, rgba(21, 16, 38, 0.35), rgba(21, 16, 38, 0.82));
+  }
+  .plate {
+    position: relative; width: 100%; max-width: 440px; margin: auto;
+    background-color: var(--green-deep);
+    background-image: radial-gradient(circle at 12px 12px, rgba(255, 210, 31, 0.1) 2px, transparent 3px);
+    background-size: 24px 24px;
+    border: 4px solid var(--yellow); border-radius: 20px;
+    box-shadow: 0 0 0 4px var(--red), 0 20px 50px rgba(0, 0, 0, 0.55);
+    padding: 24px 22px 22px;
+  }
+  .plate::before { content: ""; position: absolute; inset: 8px; border: 2px dashed rgba(255, 210, 31, 0.4); border-radius: 13px; pointer-events: none; }
+  .title {
+    font-family: var(--display); font-weight: 800; color: var(--yellow); line-height: 0.92;
+    font-size: clamp(2.2rem, 9vw, 3.1rem); text-wrap: balance;
+    text-shadow: 3px 3px 0 var(--red), 6px 6px 0 rgba(0, 0, 0, 0.35);
+  }
+  .bn { font-family: var(--display); font-weight: 600; color: var(--paper); }
+  .tagline { font-family: var(--display); font-weight: 600; font-size: 1.15rem; color: var(--paper); }
+  .rule { height: 0; border-top: 2px dashed rgba(255, 210, 31, 0.35); }
+  .legend { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  @media (max-width: 400px) { .legend { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 8px; } }
+  .legend figure { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0; }
+  .legend canvas { width: 48px; height: 64px; }
+  .legend figcaption { font-size: 0.7rem; line-height: 1.15; text-align: center; color: rgba(255, 244, 214, 0.85); }
+  .legend figcaption b { display: block; color: var(--yellow); font-weight: 600; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; font-size: 0.9rem; }
+  .kbd {
+    display: inline-block; min-width: 1.9em; padding: 1px 6px; margin-right: 2px; text-align: center; font-family: var(--display); font-weight: 600;
+    background: var(--paper); color: var(--ink); border-radius: 6px; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); font-size: 0.85rem;
+  }
+  .btn {
+    font-family: var(--display); font-weight: 800; font-size: 1.2rem; color: var(--ink); background: var(--yellow);
+    border-radius: 999px; padding: 0.55em 1.8em; box-shadow: 0 5px 0 #a8850a, 0 10px 22px rgba(0, 0, 0, 0.4);
+    transition: transform 0.08s, box-shadow 0.08s; cursor: pointer;
+  }
+  .btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #a8850a, 0 4px 10px rgba(0, 0, 0, 0.4); }
+  .btn:focus-visible, .pbtn:focus-visible { outline: 3px solid var(--paper); outline-offset: 3px; }
+  .stat { font-family: var(--display); font-weight: 800; font-size: 2.6rem; line-height: 1; color: var(--yellow); font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; font-family: var(--display); font-weight: 800; background: var(--red); color: var(--paper); border-radius: 999px; padding: 0 10px; font-size: 0.85rem; letter-spacing: 0.06em; }
+  .muted { color: rgba(255, 244, 214, 0.72); }
+  .touch-only { display: none; }
+  @media (hover: none), (pointer: coarse) { .touch-only { display: block; } .desk-only { display: none; } }
+
+  /* ---------- Multiplayer menus ---------- */
+  .lobby { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; width: 100%; max-width: 900px; margin: auto; align-items: start; }
+  @media (min-width: 860px) { .lobby { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
+  .lobby .plate { max-width: none; }
+  .hl { color: var(--yellow); }
+  .h2 { font-family: var(--display); font-weight: 800; font-size: 1.5rem; color: var(--yellow); line-height: 1; }
+  .field {
+    font-family: var(--display); font-weight: 600; font-size: 1.15rem; color: var(--ink); background: var(--paper);
+    border: 3px solid var(--yellow); border-radius: 12px; padding: 8px 12px; width: 100%; max-width: 320px;
+  }
+  .field:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
+  .field-sm { font-size: 0.95rem; padding: 5px 10px; width: 8.5em; border-width: 2px; text-transform: lowercase; letter-spacing: 0.08em; }
+  .err { color: #ffb4ab; font-size: 0.85rem; font-weight: 600; }
+  .btn-sm { font-size: 0.95rem; padding: 0.4em 1.1em; box-shadow: 0 4px 0 #a8850a, 0 6px 14px rgba(0, 0, 0, 0.35); }
+  .btn-alt { background: var(--paper); box-shadow: 0 4px 0 #b9ad8c, 0 6px 14px rgba(0, 0, 0, 0.35); }
+  .btn-ghost { background: transparent; color: var(--paper); border: 2px solid rgba(255, 244, 214, 0.5); box-shadow: none; }
+  .btn-ghost:active { transform: translateY(2px); box-shadow: none; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .link { color: var(--yellow); text-decoration: underline; text-underline-offset: 3px; font-family: var(--body); font-size: 0.8rem; font-weight: 600; margin-left: 4px; }
+  .routes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  @media (min-width: 520px) { .routes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .route {
+    text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px 11px; border-radius: 12px; cursor: pointer;
+    background: rgba(0, 0, 0, 0.22); border: 2px solid rgba(255, 244, 214, 0.2); color: var(--paper); min-width: 0;
+  }
+  .route:hover { border-color: rgba(255, 210, 31, 0.5); }
+  .route.on { border-color: var(--yellow); background: rgba(255, 210, 31, 0.13); box-shadow: inset 0 0 0 1px rgba(255, 210, 31, 0.4); }
+  .route:focus-visible { outline: 3px solid var(--paper); outline-offset: 2px; }
+  .rhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .rbn { font-family: var(--display); font-weight: 700; font-size: 1rem; line-height: 1.1; }
+  .rlen { font-family: var(--display); font-weight: 800; font-size: 0.85rem; color: var(--yellow); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .rsub { font-size: 0.78rem; color: rgba(255, 244, 214, 0.85); }
+  .rstops { font-size: 0.68rem; color: rgba(255, 244, 214, 0.6); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .rtags { font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--yellow); font-weight: 600; }
+  .routechip { max-width: 12em; text-align: right; }
+  .rnext { font-family: var(--display); font-weight: 700; font-size: 0.92rem; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rnext b { color: var(--yellow); font-variant-numeric: tabular-nums; }
+  .rbar { height: 5px; margin-top: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+  .rbar span { display: block; height: 100%; width: 0; background: var(--yellow); }
+  .mpbox { background: rgba(0, 0, 0, 0.22); border-radius: 14px; padding: 12px 14px; }
+  .online { font-size: 0.75rem; font-weight: 600; color: var(--volt); }
+  .online::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--volt); margin-right: 5px; box-shadow: 0 0 6px var(--volt); }
+  details.how summary { cursor: pointer; font-family: var(--display); font-weight: 700; color: var(--paper); font-size: 1rem; }
+  details.how summary::marker { color: var(--yellow); }
+  .lb { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; counter-reset: none; }
+  .lb li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; align-items: baseline; gap: 8px; padding: 5px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.18); font-variant-numeric: tabular-nums; }
+  .lb li.me { background: rgba(255, 210, 31, 0.18); outline: 1.5px solid rgba(255, 210, 31, 0.6); }
+  .lb .rk { font-family: var(--display); font-weight: 800; color: var(--yellow); }
+  .lb .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .lb .nm small { font-weight: 400; color: rgba(255, 244, 214, 0.65); margin-left: 6px; }
+  .lb .ds { font-family: var(--display); font-weight: 800; }
+  .lb li:nth-child(1) .rk { color: #ffd21f; } .lb li:nth-child(2) .rk { color: #d7dde3; } .lb li:nth-child(3) .rk { color: #e3a46b; }
+  .lb .empty { display: block; background: none; color: rgba(255, 244, 214, 0.7); font-size: 0.85rem; padding: 4px 0; }
+  .rules { display: flex; flex-direction: column; gap: 6px; padding-left: 1.1em; list-style: disc; font-size: 0.85rem; color: rgba(255, 244, 214, 0.88); }
+  .code {
+    margin-top: 6px; background: #0c0718; color: #cfe8d8; border-radius: 10px; padding: 10px 12px; font-size: 0.72rem; line-height: 1.45;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; overflow-x: auto; white-space: pre;
+  }
+  .code-big { font-family: var(--display); font-weight: 800; font-size: 2.4rem; letter-spacing: 0.12em; color: var(--yellow); line-height: 1; text-shadow: 2px 2px 0 var(--red); }
+  .plist { display: flex; flex-direction: column; gap: 6px; list-style: none; padding: 0; margin: 0; }
+  .plist li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.2); }
+  .plist .dotc { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .plist .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .pill { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 8px; border-radius: 999px; background: rgba(255, 244, 214, 0.15); }
+  .pill.host { background: var(--yellow); color: var(--ink); }
+  .pill.you { background: var(--paper); color: var(--ink); }
+  .pill.racing { background: var(--sky); color: var(--ink); }
+  .pill.out { background: rgba(232, 50, 43, 0.85); color: var(--paper); }
+  .hearts { margin-top: 2px; font-size: 1rem; letter-spacing: 2px; color: var(--red); text-shadow: 0 0 6px rgba(232, 50, 43, 0.6); }
+  .hearts .gone { color: rgba(255, 244, 214, 0.2); text-shadow: none; }
+  .standings ol { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; font-size: 0.78rem; font-variant-numeric: tabular-nums; min-width: 9.5em; }
+  .standings li { display: flex; gap: 6px; justify-content: space-between; }
+  .standings li.me { color: var(--yellow); font-weight: 700; }
+  .standings li.out { opacity: 0.55; text-decoration: line-through; }
+  .standings .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 7em; }
+  .countdown {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    pointer-events: none; background: radial-gradient(ellipse at center, rgba(21, 16, 38, 0.15), rgba(21, 16, 38, 0.6));
+  }
+  .countdown span { font-family: var(--display); font-weight: 800; font-size: clamp(5rem, 24vw, 9rem); line-height: 1; color: var(--yellow); text-shadow: 5px 5px 0 var(--red), 10px 10px 0 rgba(0, 0, 0, 0.35); }
+  .countdown small { font-family: var(--display); font-weight: 600; font-size: 1.1rem; color: var(--paper); }
+
+  @media (prefers-reduced-motion: reduce) { .low .cells { animation: none; } }
+</style>
+<style>html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+
+<div id="game">
+  <canvas id="cv" aria-label="Dhaka Rickshaw Run game view"></canvas>
+
+  <!-- Live HUD -->
+  <div id="hudLayer" class="layer" hidden>
+    <div class="hud">
+      <div class="flex flex-col items-start gap-2">
+        <div class="chip">
+          <div class="label">Distance · দূরত্ব</div>
+          <div class="big"><span id="dist">0</span><small>m</small></div>
+          <div class="sub">Best <span id="bestHud">0</span> m</div>
+          <div class="hearts" id="lives" aria-label="3 lives left">❤❤❤</div>
+        </div>
+        <button class="sbtn" id="muteBtn" aria-pressed="false">🔊 Sound on</button>
+        <div class="chip standings" id="standings" hidden>
+          <div class="label">Race · রেস</div>
+          <ol id="standList"></ol>
+        </div>
+      </div>
+      <div class="flex flex-col items-end gap-2">
+      <div class="chip" id="batChip">
+        <div class="label" style="text-align:right">Battery · ব্যাটারি</div>
+        <div class="bat">
+          <div class="cells" id="cells"></div><div class="nub"></div>
+          <span class="pct" id="pct">100%</span>
+        </div>
+        <div class="flex justify-end gap-1"><span class="turbo-tag" id="flyTag">FLY READY</span><span class="turbo-tag" id="turboTag">TURBO</span><span class="turbo-tag brake-tag" id="brakeTag" hidden>BRAKE</span></div>
+      </div>
+      <div class="chip routechip" id="routeChip" hidden>
+        <div class="label" id="routeName">Route</div>
+        <div class="rnext"><span id="nextStop">—</span> <b id="nextDist"></b></div>
+        <div class="rbar"><span id="routeFill"></span></div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Touch controls (phones/tablets) -->
+  <!-- Touch controls: steer with the left thumb, act with the right -->
+  <div id="pad" class="pad" hidden>
+    <div class="pad-left">
+      <button class="arrow" id="btnL" aria-label="Steer left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="arrow" id="btnR" aria-label="Steer right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5 L16 12 L9 19" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="pad-right">
+      <button class="pbtn horn" id="btnH" aria-label="Honk">📯</button>
+      <button class="pbtn fly" id="btnF" aria-label="Roadster Hop: fly over traffic">FLY<br>🚀</button>
+      <button class="pbtn brake" id="btnB" aria-label="Brake (hold)">BRAKE</button>
+      <button class="pbtn turbo" id="btnT" aria-label="Turbo boost (hold)">TURBO<br>⚡</button>
+    </div>
+  </div>
+
+  <!-- Race countdown -->
+  <div id="countdown" class="countdown" hidden><span id="cdNum">3</span><small id="cdSub">Race starting</small></div>
+
+  <!-- Entrance: username gate -->
+  <section id="gateScreen" class="screen">
+    <form class="plate flex flex-col gap-3" id="gateForm" novalidate style="max-width:420px">
+      <div>
+        <div class="bn text-lg">ঢাকা রিকশা রান</div>
+        <h1 class="title">Dhaka Rickshaw Run</h1>
+        <p class="tagline mt-2">Pick a driver name to enter.</p>
+      </div>
+      <label for="nameInput" class="label">Username</label>
+      <input id="nameInput" class="field" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="e.g. MirpurRacer">
+      <p id="nameErr" class="err" hidden></p>
+      <p class="muted text-xs">2–16 letters, numbers, spaces, _ or - (Bangla works too). It shows on the global leaderboard and to everyone in your room.</p>
+      <button class="btn self-start" type="submit">Enter</button>
+    </form>
+  </section>
+
+  <!-- Lobby -->
+  <section id="lobbyScreen" class="screen" hidden>
+    <div class="lobby">
+      <div class="plate flex flex-col gap-4">
+        <div>
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <div class="bn text-lg">ঢাকা রিকশা রান</div>
+            <span id="onlineCount" class="online" hidden></span>
+          </div>
+          <h1 class="title" style="font-size:clamp(2rem,7vw,2.7rem)">Dhaka Rickshaw Run</h1>
+          <p class="tagline mt-2">Salaam, <b id="hello" class="hl"></b> <button class="link" id="changeName" type="button">change name</button></p>
+          <p class="muted text-sm mt-1">You drive a <b class="hl">Bangla Tesla</b> down Mirpur Road at rush hour. Dodge traffic, collect batteries!</p>
+        </div>
+        <p class="muted text-sm">You get <b class="hl">5 lives ❤❤❤❤❤</b> per run. Crash or run flat and you respawn right where you were, distance kept, with a 2-second shield. Watch for people crossing: hit one and you lose 100 m.</p>
+        <p class="fact">Why "Tesla"? Dhaka nicknamed its battery rickshaws after the electric car brand: they run on batteries, and they're the poor man's EV.</p>
+        <div class="flex flex-col gap-3">
+          <div class="mpbox">
+            <div class="label">Choose your route · রুট বাছাই</div>
+            <div id="routeList" class="routes mt-2" role="radiogroup" aria-label="Route"></div>
+          </div>
+          <button class="btn self-start" id="soloBtn">Solo run</button>
+          <div class="mpbox">
+            <div class="label">Race friends · রুম</div>
+            <div class="flex gap-2 flex-wrap items-center mt-2">
+              <button class="btn btn-sm" id="createBtn">Create room</button>
+              <span class="muted text-sm">or</span>
+              <input id="codeInput" class="field field-sm" maxlength="8" spellcheck="false" autocomplete="off" placeholder="room code" aria-label="Room code">
+              <button class="btn btn-sm btn-alt" id="joinBtn">Join</button>
+            </div>
+            <p id="mpMsg" class="muted text-xs mt-2">Everyone in a room starts together. Farthest distance wins.</p>
+          </div>
+        </div>
+        <details class="how">
+          <summary>How to play</summary>
+          <div class="flex flex-col gap-3 mt-3">
+            <div class="legend" id="legend">
+              <figure><canvas data-kind="cycle"></canvas><figcaption><b>Rickshaw</b>slow</figcaption></figure>
+              <figure><canvas data-kind="cng"></canvas><figcaption><b>CNG</b>swerves</figcaption></figure>
+              <figure><canvas data-kind="bus"></canvas><figcaption><b>Bus</b>huge</figcaption></figure>
+              <figure><canvas data-kind="pothole"></canvas><figcaption><b>Pothole</b>−12%</figcaption></figure>
+              <figure><canvas data-kind="walker"></canvas><figcaption><b>People</b>−100 m</figcaption></figure>
+              <figure><canvas data-kind="battery"></canvas><figcaption><b>Battery</b>+28%</figcaption></figure>
+            </div>
+            <div class="keys desk-only">
+              <span><span class="kbd">←</span><span class="kbd">→</span></span><span>Change lane (or <span class="kbd">A</span><span class="kbd">D</span>)</span>
+              <span><span class="kbd">↑</span></span><span>Hold for Turbo, drains battery 3× faster (or <span class="kbd">W</span>)</span>
+              <span><span class="kbd">↓</span></span><span>Hold to brake (or <span class="kbd">S</span>). Traffic pulls ahead, battery regenerates</span>
+              <span><span class="kbd">Space</span></span><span><b>Roadster Hop</b>: fly over traffic for 1.3 s, costs 15% (or <span class="kbd">F</span>)</span>
+              <span><span class="kbd">H</span></span><span>Honk, like a true Dhaka driver</span>
+              <span><span class="kbd">P</span><span class="kbd">M</span></span><span>Pause (solo only) · Mute sound</span>
+            </div>
+            <p class="touch-only text-sm">Tap <b>◀ ▶</b> to change lane. Hold <b>TURBO</b> to boost (3× drain), hold <b>BRAKE</b> to slow down. Tap <b>FLY 🚀</b> to hop over traffic (−15%). Tap 📯 to honk.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="plate flex flex-col gap-3">
+        <div class="flex items-baseline justify-between gap-2">
+          <h2 class="h2">Global leaderboard</h2><span class="bn text-sm">সেরা চালক</span>
+        </div>
+        <ol id="lbList" class="lb"></ol>
+        <p id="lbMe" class="muted text-sm"></p>
+        <details class="how">
+          <summary>How ranking works</summary>
+          <ul class="rules mt-3" id="rulesList"></ul>
+          <div class="label mt-3">The exact code that ranks this board</div>
+          <pre id="rankSrc" class="code"></pre>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- Room -->
+  <section id="roomScreen" class="screen" hidden>
+    <div class="plate flex flex-col gap-4" style="max-width:480px">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div class="label">Room code</div>
+          <div class="code-big" id="roomCode">—</div>
+        </div>
+        <button class="btn btn-sm btn-alt" id="copyCode" type="button">Copy code</button>
+      </div>
+      <p class="muted text-sm">Friends open this game, enter a name, and join with this code.</p>
+      <div>
+        <div class="label">Drivers here</div>
+        <ul id="roomList" class="plist mt-2"></ul>
+      </div>
+      <div id="roomResults" hidden>
+        <div class="label" id="roomResultsLabel">Last race</div>
+        <ol id="resultsList" class="lb mt-2"></ol>
+      </div>
+      <div id="roomRouteBox" hidden>
+        <div class="label">Route for the next race · you're the host</div>
+        <div id="roomRoutes" class="routes mt-2" role="radiogroup" aria-label="Route for the race"></div>
+      </div>
+      <p id="roomStatus" class="tagline" style="font-size:1rem"></p>
+      <div class="flex gap-3 flex-wrap items-center">
+        <button class="btn" id="raceBtn" hidden>Start race</button>
+        <button class="btn btn-sm btn-ghost" id="leaveBtn" type="button">Leave room</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Game over -->
+  <section id="overScreen" class="screen" hidden>
+    <div class="plate flex flex-col gap-3 text-center items-center" style="max-width:420px">
+      <div class="bn text-lg" id="overBn">খেলা শেষ</div>
+      <h2 class="title" style="font-size:clamp(2rem,8vw,2.6rem)" id="overTitle">Game Over</h2>
+      <p class="tagline" id="reason">Crashed</p>
+      <div class="flex gap-8 justify-center items-end mt-1">
+        <div><div class="label">Distance</div><div class="stat"><span id="finalDist">0</span><span style="font-size:.45em"> m</span></div></div>
+        <div><div class="label">Your best</div><div class="stat" style="color:var(--paper)"><span id="finalBest">0</span><span style="font-size:.45em"> m</span></div></div>
+      </div>
+      <span class="badge" id="newBest" hidden>NEW BEST!</span>
+      <p class="muted text-xs" id="saveNote"></p>
+      <div id="raceBox" class="w-full text-left" hidden>
+        <div class="label" id="raceLabel">Race standings</div>
+        <ol id="raceList" class="lb mt-2"></ol>
+      </div>
+      <p class="muted text-sm" id="tip"></p>
+      <div class="flex gap-3 flex-wrap justify-center items-center">
+        <button class="btn" id="restartBtn">Run again</button>
+        <button class="btn btn-sm btn-ghost" id="backBtn" type="button">Back to lobby</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pause -->
+  <section id="pauseScreen" class="screen" hidden>
+    <div class="plate flex flex-col gap-3 items-center text-center" style="max-width:320px">
+      <h2 class="title" style="font-size:2.2rem">Paused</h2>
+      <p class="muted text-sm">Traffic is waiting for you.</p>
+      <button class="btn" id="resumeBtn">Resume</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* =========================================================
+     CONFIG
+     ========================================================= */
+  const LANES = 4;
+  const CFG = {
+    vBase: 0.62,          // road speed at start, in screen-heights per second
+    vMax: 1.22,           // road speed cap
+    rampMeters: 3000,     // distance over which speed ramps to max
+    turboMult: 1.65,
+    metersPerScreen: 20,  // meters travelled per screen-height scrolled
+    drain: 2.4,           // battery % per second
+    drainTurbo: 7.5,
+    brakeMult: 0.4,       // speed while braking
+    drainBrake: 0.8,      // regenerative braking: the battery barely drains
+    pack: 28,
+    potholeCost: 12,
+    flyDur: 1.35,         // seconds airborne for a Roadster Hop
+    flyCost: 15,          // battery % per hop
+    flyCool: 3.5,         // cooldown after landing
+    lives: 5,             // crashes allowed per run; you respawn where you were
+    respawnDelay: 1.4,    // seconds the road holds still after losing a life
+    shield: 2.4,          // seconds of no-collision after a respawn
+    respawnBattery: 45,   // battery is topped up to at least this on respawn
+    walkerPenalty: 100,   // meters taken off your distance for hitting a pedestrian (no life lost)
+  };
+
+  // Obstacle archetypes. w/h in lane-widths, f = fraction of road speed they scroll at.
+  const TYPES = {
+    cycle:   { name: 'a cycle rickshaw', w: 0.5,  h: 1.0,  f: 0.78 },
+    cng:     { name: 'a CNG',            w: 0.6,  h: 1.08, f: 0.6  },
+    bus:     { name: 'a bus',            w: 0.88, h: 2.7,  f: 0.42 },
+    pothole: { name: 'a pothole',        w: 0.58, h: 0.42, f: 1    },
+    walker:  { name: 'a pedestrian',     w: 0.4,  h: 0.4,  f: 1    },
+    car:     { name: 'a private car',    w: 0.56, h: 1.05, f: 0.55 },
+  };
+  const CAR_COLORS = ['#e6e6e6', '#b8bcc2', '#2b2d31', '#7a1f1f', '#20365c', '#d8d0bd'];
+  const PEOPLE_CLOTHES = ['#e53935', '#43a047', '#fdd835', '#1e88e5', '#8e24aa', '#fb8c00', '#00acc1', '#f5f5f5', '#d81b60'];
+
+  const ROOFS = ['#8e8a84', '#9a958e', '#85817c', '#a19c94', '#7f7b76', '#958f86', '#8a8680', '#999490'];
+  const SIDE_CLOTHES = ['#5f5a55', '#6b6f73', '#4f5a63', '#7a7066', '#5c6458', '#8a847c'];
+  const HOODS = ['#e8322b', '#1e88e5', '#8e24aa', '#00a86b', '#ff8f00', '#d81b60'];
+  const SHIRTS = ['#f5f5f5', '#4fc3f7', '#ffb74d', '#aed581', '#ef9a9a'];
+  // Real bus services that run along Mirpur Road (Gabtoli · Shyamoli · Asad Gate · Dhanmondi 27 · Science Lab · New Market · Azimpur).
+  // Route endpoints from published Dhaka route lists; liveries are stylised.
+  const BUS_LINES = [
+    { bn: '৭ নম্বর',     en: '7 Number',    no: '৭',  from: 'গাবতলী',     to: 'সদরঘাট',    enRoute: 'Gabtoli–Sadarghat',    col: ['#d62828', '#ffd21f'] },
+    { bn: '১৩ নম্বর',    en: '13 Number',   no: '১৩', from: 'মোহাম্মদপুর', to: 'আজিমপুর',   enRoute: 'Mohammadpur–Azimpur',  col: ['#1565c0', '#ffffff'] },
+    { bn: 'বিহঙ্গ',       en: 'Bihanga',     no: '',   from: 'মিরপুর',      to: 'আজিমপুর',   enRoute: 'Mirpur–Azimpur',       col: ['#00897b', '#ffd21f'] },
+    { bn: 'ঠিকানা',      en: 'Thikana',     no: '',   from: 'বাইপাইল',     to: 'সাইনবোর্ড',  enRoute: 'Baipail–Signboard',    col: ['#ef6c00', '#fff4d6'] },
+    { bn: 'বিকল্প',       en: 'Bikalpa',     no: '',   from: 'মিরপুর ১৪',   to: 'যাত্রাবাড়ী', enRoute: 'Mirpur 14–Jatrabari',  col: ['#2e7d32', '#ffffff'] },
+    { bn: 'নিসর্গ',       en: 'Nisorgo',     no: '',   from: 'মিরপুর ১৪',   to: 'আজিমপুর',   enRoute: 'Mirpur 14–Azimpur',    col: ['#6a1b9a', '#ffd21f'] },
+    { bn: 'ট্রান্স সিলভা', en: 'Trans Silva', no: '',   from: 'চিড়িয়াখানা',  to: 'যাত্রাবাড়ী', enRoute: 'Zoo–Jatrabari',        col: ['#455a64', '#ffd21f'] },
+    { bn: 'লাব্বাইক',     en: 'Labbaik',     no: '',   from: 'সাভার',       to: 'যাত্রাবাড়ী', enRoute: 'Savar–Jatrabari',      col: ['#b71c1c', '#ffffff'] },
+    { bn: 'ভিআইপি ২৭',   en: 'VIP 27',      no: '২৭', from: 'আজিমপুর',     to: 'গাজীপুর',   enRoute: 'Azimpur–Gazipur',      col: ['#f9a825', '#1a1a1a'], ink: '#1a1a1a' },
+  ];
+  const BANNERS = ['শুভ যাত্রা', 'মিরপুর রোড', 'সাবধানে চলুন', 'ধানমন্ডি ২৭', 'নিউ মার্কেট', 'ঈদ মোবারক', 'বিদ্যুৎ বাঁচান'];
+  const FLAGS = ['#e8322b', '#008a5c', '#ffd21f', '#1e88e5', '#d81b60', '#ff8f00'];
+  const TIPS = [
+    'Turbo is fast but hungry. Save it for gaps between buses.',
+    'CNGs blink amber before they swerve. Watch for it.',
+    'Potholes won\'t end your run, but they cost 12% battery.',
+    'Battery packs get rarer the farther you go.',
+    'Buses are slow. Pass them early, not alongside.',
+    'Boxed in? Roadster Hop over the jam, but watch where you land.',
+    'You can still change lanes mid-flight.',
+    'After a respawn you get a short shield. Use it to push through traffic.',
+    'People cross Mirpur Road anywhere. Hit one and you lose 100 m.',
+    'A Roadster Hop clears a jaywalker too.',
+  ];
+
+  /* =========================================================
+     HELPERS
+     ========================================================= */
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function weighted(entries) {
+    let total = 0; for (const [, w] of entries) total += w;
+    let r = Math.random() * total;
+    for (const [k, w] of entries) { if ((r -= w) <= 0) return k; }
+    return entries[0][0];
+  }
+
+  // Rounded rectangle path (own impl. for older browsers).
+  function rr(c, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+  function dot(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } },
+  };
+
+  /* =========================================================
+     SOUND  — everything synthesised with Web Audio, no files.
+     Starts on the first Start/Restart press (browsers need a gesture).
+     ========================================================= */
+  const Sound = (() => {
+    let ac = null, master = null, noiseBuf = null;
+    let eng = null, amb = null;
+    let muted = store.get('drr-muted') === '1';
+
+    function init() {
+      if (ac) { if (ac.state === 'suspended') ac.resume().catch(() => {}); return; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try { ac = new AC(); } catch (e) { return; }
+      master = ac.createGain(); master.gain.value = muted ? 0 : 0.8; master.connect(ac.destination);
+      setTimeout(() => Voice.load(), 0); // decode the Bangla voice clips now that audio is unlocked
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      startEngine(); startAmbience();
+    }
+
+    // Output node with optional stereo pan
+    function out(pan) {
+      if (pan && ac.createStereoPanner) { const p = ac.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); p.connect(master); return p; }
+      return master;
+    }
+
+    function tone(freq, dur, { type = 'sine', vol = 0.2, at = 0, slide = 0, pan = 0, attack = 0.005 } = {}) {
+      if (!ac) return;
+      const t = ac.currentTime + at;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(out(pan));
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+
+    function noise(dur, { vol = 0.3, freq = 1000, type = 'lowpass', at = 0, sweep = 0, pan = 0, q = 1 } = {}) {
+      if (!ac) return;
+      const t = ac.currentTime + at;
+      const s = ac.createBufferSource(); s.buffer = noiseBuf;
+      const f = ac.createBiquadFilter(); f.type = type; f.Q.value = q; f.frequency.setValueAtTime(freq, t);
+      if (sweep) f.frequency.exponentialRampToValueAtTime(sweep, t + dur);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(out(pan));
+      s.start(t, Math.random()); s.stop(t + dur + 0.05);
+    }
+
+    // Electric motor whine: two detuned saws through a lowpass, pitch follows speed.
+    function startEngine() {
+      const g = ac.createGain(); g.gain.value = 0;
+      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; f.Q.value = 4;
+      const o1 = ac.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 90;
+      const o2 = ac.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = 181;
+      const o2g = ac.createGain(); o2g.gain.value = 0.4;
+      o1.connect(f); o2.connect(o2g); o2g.connect(f); f.connect(g); g.connect(master);
+      o1.start(); o2.start();
+      eng = { g, f, o1, o2 };
+    }
+
+    // Distant city hum: looping filtered noise.
+    function startAmbience() {
+      const s = ac.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 380;
+      const g = ac.createGain(); g.gain.value = 0;
+      s.connect(f); f.connect(g); g.connect(master); s.start();
+      amb = { g };
+    }
+
+    function engine(speedRel, turbo, on) {
+      if (!eng) return;
+      const t = ac.currentTime;
+      const base = 70 + speedRel * 95 + (turbo ? 70 : 0);
+      eng.o1.frequency.setTargetAtTime(base, t, 0.12);
+      eng.o2.frequency.setTargetAtTime(base * 2.01, t, 0.12);
+      eng.f.frequency.setTargetAtTime(turbo ? 2200 : 900 + speedRel * 500, t, 0.15);
+      eng.g.gain.setTargetAtTime(on ? (turbo ? 0.075 : 0.04) : 0, t, 0.1);
+      amb.g.gain.setTargetAtTime(on ? 0.05 : 0.025, t, 0.3);
+    }
+
+    // Dhaka's soundtrack: horns and bells.
+    // Street echo: a short synthetic reverb, so horns bounce off the buildings.
+    let verb = null;
+    function getVerb() {
+      if (verb || !ac) return verb;
+      const len = Math.floor(ac.sampleRate * 1.1), buf = ac.createBuffer(2, len, ac.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2) * (i < 900 ? i / 900 : 1);
+      }
+      verb = ac.createConvolver(); verb.buffer = buf;
+      const g = ac.createGain(); g.gain.value = 0.22; verb.connect(g); g.connect(master);
+      return verb;
+    }
+    // Soft clipper: the overdriven buzz of a real horn diaphragm.
+    let clipCurve = null;
+    function getClip() {
+      if (clipCurve) return clipCurve;
+      clipCurve = new Float32Array(1024);
+      for (let i = 0; i < 1024; i++) { const x = (i / 1023) * 2 - 1; clipCurve[i] = Math.tanh(x * 3.2); }
+      return clipCurve;
+    }
+    // One horn blast. Real horns: two or three detuned tones, a pitch "scoop" as the
+    // diaphragm starts, roughness from the buzzing reed, and a brassy trumpet resonance.
+    function blast(freqs, dur, { at = 0, pan = 0, vol = 0.1, wave = 'square', attack = 0.012, bright = 1800 } = {}) {
+      if (!ac) return;
+      const t = ac.currentTime + at;
+      const sum = ac.createGain(); sum.gain.value = 0.7 / freqs.length;
+      const lfo = ac.createOscillator(), lfoG = ac.createGain(); // diaphragm roughness
+      lfo.frequency.value = rand(26, 34);
+      lfo.start(t); lfo.stop(t + dur + 0.2);
+      for (const f of freqs) {
+        const o = ac.createOscillator(); o.type = wave;
+        o.frequency.setValueAtTime(f * 0.93, t);
+        o.frequency.exponentialRampToValueAtTime(f, t + 0.04);
+        o.frequency.setValueAtTime(f, t + dur - 0.05);
+        o.frequency.exponentialRampToValueAtTime(f * 0.97, t + dur + 0.06);
+        const lg = ac.createGain(); lg.gain.value = f * 0.006; lfo.connect(lg); lg.connect(o.frequency);
+        o.connect(sum); o.start(t); o.stop(t + dur + 0.12);
+      }
+      const shaper = ac.createWaveShaper(); shaper.curve = getClip();
+      const body = ac.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = bright; body.Q.value = 1.4; body.gain.value = 9;
+      const bell = ac.createBiquadFilter(); bell.type = 'peaking'; bell.frequency.value = bright * 1.8; bell.Q.value = 2; bell.gain.value = 5;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200;
+      const env = ac.createGain();
+      env.gain.setValueAtTime(0.0001, t);
+      env.gain.exponentialRampToValueAtTime(vol, t + attack);
+      env.gain.setValueAtTime(vol, t + dur);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.08);
+      sum.connect(shaper); shaper.connect(body); body.connect(bell); bell.connect(lp); lp.connect(env);
+      env.connect(out(pan));
+      const send = ac.createGain(); send.gain.value = 0.45; env.connect(send); send.connect(getVerb());
+    }
+
+    function horn(kind, pan = 0, vol = 1) {
+      if (!ac) return;
+      if (kind === 'bus') {            // pressure air horn: low three-tone chord, slow swell, honked twice
+        blast([196, 247, 294], 0.42, { pan, vol: 0.13 * vol, wave: 'sawtooth', attack: 0.045, bright: 1100 });
+        blast([196, 247, 294], 0.6, { at: 0.55, pan, vol: 0.13 * vol, wave: 'sawtooth', attack: 0.045, bright: 1100 });
+      } else if (kind === 'car') {     // ordinary car horn: two electric discs a third apart
+        blast([415, 523], rand(0.22, 0.5), { pan, vol: 0.11 * vol });
+      } else if (kind === 'cng') {     // CNG: thin, high and impatient, pip-pip
+        for (const at of [0, 0.17]) blast([660, 830], 0.11, { at, pan, vol: 0.075 * vol, bright: 2600 });
+      } else if (kind === 'bell') {    // cycle rickshaw "kring-kring"
+        for (let i = 0; i < 6; i++) {
+          tone(2450, 0.12, { type: 'triangle', vol: 0.05 * vol, at: i * 0.06, pan });
+          tone(3150, 0.09, { type: 'sine', vol: 0.03 * vol, at: i * 0.06, pan });
+        }
+      } else if (kind === 'player') {  // our tomtom: short tap then a long lean on the horn
+        blast([466, 587], 0.12, { vol: 0.1 });
+        blast([466, 587], 0.42, { at: 0.18, vol: 0.1 });
+      }
+    }
+
+    const sfx = {
+      lane: () => noise(0.09, { vol: 0.06, freq: 1400, type: 'bandpass', q: 2 }),
+      pickup: () => { [660, 880, 1320].forEach((f, i) => tone(f, 0.16, { type: 'sine', vol: 0.12, at: i * 0.06 })); tone(1760, 0.25, { type: 'triangle', vol: 0.05, at: 0.18 }); },
+      pothole: () => { noise(0.18, { vol: 0.5, freq: 320 }); tone(90, 0.2, { vol: 0.25, slide: 40 }); },
+      crash: () => {
+        noise(0.7, { vol: 0.7, freq: 2500, sweep: 150 });
+        noise(0.35, { vol: 0.25, freq: 3200, type: 'bandpass', q: 6 });
+        tone(70, 0.6, { vol: 0.4, slide: 30 });
+      },
+      flat: () => { tone(300, 0.9, { type: 'sawtooth', vol: 0.08, slide: 40 }); },
+      over: () => { [523, 392, 330, 262].forEach((f, i) => tone(f, 0.28, { type: 'triangle', vol: 0.09, at: 0.45 + i * 0.2 })); },
+      low: () => tone(880, 0.09, { type: 'square', vol: 0.035 }),
+      start: () => { [392, 523, 659].forEach((f, i) => tone(f, 0.14, { type: 'triangle', vol: 0.09, at: i * 0.08 })); },
+      turbo: () => tone(400, 0.35, { type: 'sawtooth', vol: 0.05, slide: 1400 }),
+      fly: () => {   // cold-gas thruster hiss + rising whine
+        noise(1.3, { vol: 0.28, freq: 3200, type: 'bandpass', q: 0.7, sweep: 1100 });
+        tone(220, 0.7, { type: 'sawtooth', vol: 0.05, slide: 1100 });
+        tone(660, 0.5, { type: 'triangle', vol: 0.05, at: 0.08, slide: 1320 });
+      },
+      tick: () => tone(660, 0.12, { type: 'square', vol: 0.05 }),
+      // a human-ish "aaa-ooh!" yelp: sawtooth through a vowel formant, pitch rising then falling
+      yell: (pan = 0) => {
+        if (!ac) return;
+        const t = ac.currentTime, base = rand(230, 330);
+        const o = ac.createOscillator(); o.type = 'sawtooth';
+        o.frequency.setValueAtTime(base, t);
+        o.frequency.linearRampToValueAtTime(base * 1.6, t + 0.12);
+        o.frequency.linearRampToValueAtTime(base * 0.75, t + 0.55);
+        const vib = ac.createOscillator(), vg = ac.createGain(); vib.frequency.value = 7; vg.gain.value = 12;
+        vib.connect(vg); vg.connect(o.frequency);
+        const f1 = ac.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.setValueAtTime(800, t); f1.frequency.linearRampToValueAtTime(450, t + 0.55); f1.Q.value = 4;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+        o.connect(f1); f1.connect(g); g.connect(out(pan));
+        o.start(t); vib.start(t); o.stop(t + 0.65); vib.stop(t + 0.65);
+        tone(150, 0.18, { vol: 0.25, slide: 60 }); // thump
+      },
+      brake: () => { noise(0.35, { vol: 0.12, freq: 3200, type: 'bandpass', q: 8, sweep: 2600 }); tone(1900, 0.3, { type: 'sawtooth', vol: 0.025, slide: 1500 }); },
+      thump: () => { tone(140, 0.2, { vol: 0.3, slide: 55 }); noise(0.12, { vol: 0.25, freq: 500 }); },
+      land: () => { noise(0.22, { vol: 0.45, freq: 450 }); tone(120, 0.22, { vol: 0.22, slide: 50 }); },
+    };
+
+    // Decode an embedded clip (callback form works on older Safari too).
+    function decode(bytes) {
+      return new Promise((res, rej) => {
+        if (!ac) return rej(new Error('no audio'));
+        try { const p = ac.decodeAudioData(bytes.buffer.slice(0), res, rej); if (p && p.catch) p.catch(rej); } catch (e) { rej(e); }
+      });
+    }
+    // Play a decoded clip; returns a handle that can stop it.
+    function playBuffer(buf, { pan = 0, vol = 1, rate = 1 } = {}) {
+      if (!ac || !buf) return null;
+      const s = ac.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate;
+      const g = ac.createGain(); g.gain.value = vol;
+      s.connect(g); g.connect(out(pan)); s.start();
+      return { stop: () => { try { s.stop(); } catch (_) {} }, ends: ac.currentTime + buf.duration / rate };
+    }
+    const now = () => (ac ? ac.currentTime : 0);
+
+    function suspend(on) { if (!ac) return; on ? ac.suspend().catch(() => {}) : ac.resume().catch(() => {}); }
+    function toggleMute() {
+      muted = !muted; store.set('drr-muted', muted ? '1' : '0');
+      if (master) master.gain.setTargetAtTime(muted ? 0 : 0.8, ac.currentTime, 0.05);
+      return muted;
+    }
+    return { init, engine, horn, sfx, suspend, toggleMute, isMuted: () => muted, decode, playBuffer, now, ready: () => !!ac };
+  })();
+
+  /* =========================================================
+     VOICES — Bengali street talk through the browser's speech engine.
+     Uses a Bengali (bn) voice when the device has one; otherwise reads the
+     romanised line with an Indian-English (or default) voice.
+     ========================================================= */
+  // Spoken lines are switched off: synthetic voices sounded robotic. The Bangla
+  // lines still appear in speech bubbles. To bring voices back, embed real
+  // recordings and play them here.
+  const Voice = { load() {}, say() { return false; }, stop() {} };
+
+  const SHOUT_HIT = [
+    { bn: 'কিরে হালার পো? কিরে হালার পো?', ro: 'Kire halar po? Kire halar po?', clip: 'hit0' },
+    { bn: 'আরে মরে গেলাম!', ro: 'Arey, more gelam!', clip: 'hit1' },
+    { bn: 'কিরে হালার পো? চোখে দেখস না?', ro: 'Kire halar po? Chokhe dekhosh na?', clip: 'hit2' },
+    { bn: 'আল্লাহ গো, মরে গেলাম!', ro: 'Allah go, more gelam!', clip: 'hit3' },
+  ];
+  const SHOUT_NEAR = [
+    { bn: 'আরে আস্তে চালান!', ro: 'Arey, aste chalan!', clip: 'near0' },
+    { bn: 'চোখ নাই নাকি?', ro: 'Chokh nai naki?', clip: 'near1' },
+    { bn: 'ওই মিয়া, দেখে চালান!', ro: 'Oi miya, dekhe chalan!', clip: 'near2' },
+  ];
+  const CALL_SIDE = { bn: 'সাইড! সাইড!', ro: 'Side! Side!', clip: 'side' };
+  const CALL_CNG = { bn: 'ওই মামা, যাইবেন?', ro: 'Oi mama, jaiben?', clip: 'cng' };
+
+  /* =========================================================
+     VEHICLE & PROP DRAWING  (all drawn centred at 0,0, facing up)
+     ========================================================= */
+  /* ---- shading helpers: one light source, from the upper left ----
+     Vehicles are drawn in a light oblique view: the camera sits behind and
+     above, so each one shows its roof plus a strip of its rear face below. */
+  const _shade = new Map();
+  function shade(hex, f) {
+    const k = hex + f;
+    let v = _shade.get(k);
+    if (v) return v;
+    const n = parseInt(hex.slice(1), 16);
+    let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+    if (f >= 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; } else { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+    v = `rgb(${r | 0},${g | 0},${b | 0})`;
+    _shade.set(k, v);
+    return v;
+  }
+  // A left-to-right gradient that makes a flat shape read as a rounded, lit surface.
+  function curve(c, x, w, base, k = 1) {
+    const g = c.createLinearGradient(x, 0, x + w, 0);
+    g.addColorStop(0, shade(base, -0.34 * k));
+    g.addColorStop(0.18, shade(base, 0.24 * k));
+    g.addColorStop(0.55, base);
+    g.addColorStop(1, shade(base, -0.4 * k));
+    return g;
+  }
+  function softShadow(c, x, y, w, h, r, dx = 5, dy = 9) {
+    c.fillStyle = 'rgba(0,0,0,0.15)'; rr(c, x + dx - 3, y + dy - 2, w + 7, h + 6, r + 3); c.fill();
+    c.fillStyle = 'rgba(0,0,0,0.28)'; rr(c, x + dx, y + dy, w, h, r); c.fill();
+  }
+  function shadow(c, x, y, w, h, r) { softShadow(c, x, y, w, h, r); }
+  function wheel(c, x, y, w, h) {
+    c.fillStyle = '#0b0b0e'; rr(c, x, y, w, h, Math.min(w, h) * 0.35); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.13)';
+    for (let i = 1; i < 4; i++) c.fillRect(x + w * 0.18, y + (h * i) / 4, w * 0.64, 1);
+  }
+  function glass(c, x, y, w, h, r) {
+    const g = c.createLinearGradient(x, y, x + w, y + h);
+    g.addColorStop(0, '#a8e0ff'); g.addColorStop(0.45, '#40708f'); g.addColorStop(1, '#16242f');
+    c.fillStyle = g; rr(c, x, y, w, h, r); c.fill();
+    c.save(); rr(c, x, y, w, h, r); c.clip();
+    c.fillStyle = 'rgba(255,255,255,0.32)';
+    c.beginPath(); c.moveTo(x + w * 0.12, y + h); c.lineTo(x + w * 0.3, y); c.lineTo(x + w * 0.4, y); c.lineTo(x + w * 0.22, y + h); c.closePath(); c.fill();
+    c.restore();
+  }
+  function tailLight(c, x, y, w, h) {
+    c.fillStyle = '#ff2a1f'; rr(c, x, y, w, h, Math.min(w, h) * 0.3); c.fill();
+    c.fillStyle = 'rgba(255,210,200,0.75)'; c.fillRect(x + w * 0.18, y + h * 0.2, w * 0.3, h * 0.25);
+  }
+  // Bangladeshi number plate (white, black lettering)
+  function plate(c, cx, cy, w, h, text) {
+    c.fillStyle = '#f4f4f0'; rr(c, cx - w / 2, cy - h / 2, w, h, 1.5); c.fill();
+    c.strokeStyle = '#222'; c.lineWidth = 0.6; c.stroke();
+    if (text && h > 6) {
+      c.fillStyle = '#111'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = `700 ${Math.max(4, h * 0.6)}px 'Hind Siliguri', sans-serif`;
+      c.fillText(text, cx, cy + 0.5, w * 0.92);
+    } else { c.fillStyle = '#333'; c.fillRect(cx - w * 0.32, cy - 0.5, w * 0.64, 1); }
+  }
+
+  function drawFlower(c, cx, cy, r) {
+    c.fillStyle = '#ffd21f';
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      dot(c, cx + Math.cos(a) * r * 0.6, cy + Math.sin(a) * r * 0.6, r * 0.45);
+    }
+    c.fillStyle = '#e8322b'; dot(c, cx, cy, r * 0.35);
+  }
+
+  // Player: electric "tomtom" (Bangla Tesla) with a rickshaw-art canopy.
+  function drawTomtom(c, w, h, noShadow) {
+    const x = -w / 2, y = -h / 2, dp = h * 0.11, body = '#ffd21f';
+    if (!noShadow) softShadow(c, x, y + h * 0.05, w, h * 0.95 + dp, w * 0.3);
+    wheel(c, -w * 0.09, y - h * 0.03, w * 0.18, h * 0.17);
+    wheel(c, x - w * 0.09, y + h * 0.6, w * 0.19, h * 0.28);
+    wheel(c, x + w * 0.9, y + h * 0.6, w * 0.19, h * 0.28);
+    // side and rear walls
+    c.fillStyle = shade(body, -0.42); rr(c, x, y + h * 0.16, w, h * 0.84 + dp, w * 0.3); c.fill();
+    c.fillStyle = '#2a2a2e'; rr(c, x + w * 0.04, y + h + dp * 0.55, w * 0.92, dp * 0.42, dp * 0.2); c.fill(); // bumper
+    tailLight(c, x + w * 0.08, y + h + dp * 0.06, w * 0.18, dp * 0.42);
+    tailLight(c, x + w * 0.74, y + h + dp * 0.06, w * 0.18, dp * 0.42);
+    plate(c, 0, y + h + dp * 0.3, w * 0.3, dp * 0.4);
+    // nose cowl and deck
+    c.strokeStyle = 'rgba(40,25,0,0.55)'; c.lineWidth = 1;
+    c.fillStyle = curve(c, x + w * 0.22, w * 0.56, body); rr(c, x + w * 0.22, y + h * 0.01, w * 0.56, h * 0.27, w * 0.24); c.fill(); c.stroke();
+    c.fillStyle = curve(c, x, w, body); rr(c, x, y + h * 0.16, w, h * 0.82, w * 0.3); c.fill(); c.stroke();
+    glass(c, x + w * 0.15, y + h * 0.19, w * 0.7, h * 0.13, w * 0.08);
+    c.fillStyle = '#16161a'; dot(c, x - w * 0.03, y + h * 0.24, w * 0.06); dot(c, x + w * 1.03, y + h * 0.24, w * 0.06); // mirrors
+    // raised vinyl canopy with rickshaw art
+    const rx = x + w * 0.06, ry = y + h * 0.33, rw = w * 0.88, rh = h * 0.6;
+    c.fillStyle = '#7a130f'; rr(c, rx, ry + dp * 0.25, rw, rh + dp * 0.45, w * 0.2); c.fill(); // canopy thickness
+    c.save(); rr(c, rx, ry, rw, rh, w * 0.2); c.clip();
+    c.fillStyle = '#e8322b'; c.fillRect(rx, ry, rw, rh);
+    c.fillStyle = '#008a5c'; c.fillRect(rx + rw * 0.33, ry, rw * 0.34, rh);
+    c.fillStyle = '#fff4d6';
+    for (let i = 0; i < 6; i++) {
+      const yy = ry + rh * (0.1 + i * 0.16);
+      dot(c, rx + rw * 0.16, yy, w * 0.035); dot(c, rx + rw * 0.84, yy, w * 0.035);
+    }
+    drawFlower(c, 0, ry + rh * 0.5, w * 0.15);
+    const sh = c.createLinearGradient(rx, 0, rx + rw, 0);
+    sh.addColorStop(0, 'rgba(0,0,0,0.32)'); sh.addColorStop(0.22, 'rgba(255,255,255,0.24)');
+    sh.addColorStop(0.5, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.4)');
+    c.fillStyle = sh; c.fillRect(rx, ry, rw, rh);
+    c.restore();
+    c.strokeStyle = '#ffd21f'; c.lineWidth = 2; rr(c, rx, ry, rw, rh, w * 0.2); c.stroke();
+    c.fillStyle = '#fffbe0'; dot(c, 0, y + h * 0.05, w * 0.065);
+    c.fillStyle = '#ffffff'; dot(c, -w * 0.02, y + h * 0.04, w * 0.025);
+  }
+
+  // Cycle rickshaw: rider up front, painted hood behind.
+  function drawCycle(c, w, h, o) {
+    const x = -w / 2, y = -h / 2, dp = h * 0.1;
+    softShadow(c, x, y + h * 0.42, w, h * 0.58 + dp, w * 0.3, 4, 7);
+    wheel(c, -w * 0.05, y, w * 0.1, h * 0.24);
+    wheel(c, x - w * 0.05, y + h * 0.64, w * 0.12, h * 0.3);
+    wheel(c, x + w * 0.93, y + h * 0.64, w * 0.12, h * 0.3);
+    c.strokeStyle = '#b9b4aa'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(0, y + h * 0.1); c.lineTo(0, y + h * 0.5); c.stroke();
+    c.lineWidth = 2.5; c.strokeStyle = '#dcdcdc';
+    c.beginPath(); c.moveTo(-w * 0.3, y + h * 0.16); c.lineTo(w * 0.3, y + h * 0.16); c.stroke();
+    // rider with a shaded shirt and a gamcha round the head
+    const sg = c.createRadialGradient(-w * 0.08, y + h * 0.27, 1, 0, y + h * 0.3, w * 0.34);
+    sg.addColorStop(0, shade(o.shirt, 0.25)); sg.addColorStop(1, shade(o.shirt, -0.35));
+    c.fillStyle = sg; c.beginPath(); c.ellipse(0, y + h * 0.3, w * 0.33, w * 0.16, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#c86a2b'; dot(c, 0, y + h * 0.29, w * 0.15);
+    c.fillStyle = '#2a1b12'; dot(c, 0, y + h * 0.29, w * 0.1);
+    c.fillStyle = 'rgba(255,255,255,0.25)'; dot(c, -w * 0.03, y + h * 0.27, w * 0.035);
+    c.fillStyle = '#4a2f18'; rr(c, x + w * 0.1, y + h * 0.42, w * 0.8, h * 0.14, 3); c.fill();
+    // hood: dark back of the hood first, then the curved top
+    const hood = (dy) => {
+      c.beginPath();
+      c.moveTo(x, y + h + dy); c.lineTo(x, y + h * 0.66 + dy);
+      c.quadraticCurveTo(x, y + h * 0.47 + dy, 0, y + h * 0.47 + dy);
+      c.quadraticCurveTo(x + w, y + h * 0.47 + dy, x + w, y + h * 0.66 + dy);
+      c.lineTo(x + w, y + h + dy); c.closePath();
+    };
+    hood(dp); c.fillStyle = shade(o.color, -0.5); c.fill();
+    c.fillStyle = '#ffd21f'; c.fillRect(x + w * 0.12, y + h + dp * 0.35, w * 0.76, dp * 0.25);
+    hood(0); c.fillStyle = curve(c, x, w, o.color); c.fill();
+    c.save(); hood(0); c.clip();
+    c.strokeStyle = 'rgba(255,244,214,0.7)'; c.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+      const yy = y + h * (0.6 + i * 0.11);
+      c.beginPath(); c.moveTo(x, yy + h * 0.05); c.quadraticCurveTo(0, yy - h * 0.04, x + w, yy + h * 0.05); c.stroke();
+    }
+    c.fillStyle = '#ffd21f';
+    for (let i = 0; i < 3; i++) dot(c, x + w * (0.25 + i * 0.25), y + h * 0.9, w * 0.05);
+    c.restore();
+    hood(0); c.strokeStyle = '#ffd21f'; c.lineWidth = 1.5; c.stroke();
+  }
+
+  // CNG auto-rickshaw: green body, steel-mesh cage, blinks before swerving.
+  function drawCNG(c, w, h, o, t) {
+    const x = -w / 2, y = -h / 2, dp = h * 0.11, body = '#12a14b';
+    softShadow(c, x, y, w, h + dp, w * 0.3);
+    wheel(c, -w * 0.1, y - h * 0.02, w * 0.2, h * 0.16);
+    wheel(c, x - w * 0.08, y + h * 0.64, w * 0.18, h * 0.24);
+    wheel(c, x + w * 0.9, y + h * 0.64, w * 0.18, h * 0.24);
+    c.fillStyle = shade(body, -0.45); rr(c, x, y + h * 0.15, w, h * 0.85 + dp, w * 0.28); c.fill();
+    c.fillStyle = '#222'; rr(c, x + w * 0.05, y + h + dp * 0.58, w * 0.9, dp * 0.38, dp * 0.18); c.fill();
+    tailLight(c, x + w * 0.08, y + h + dp * 0.08, w * 0.16, dp * 0.4);
+    tailLight(c, x + w * 0.76, y + h + dp * 0.08, w * 0.16, dp * 0.4);
+    plate(c, 0, y + h + dp * 0.3, w * 0.32, dp * 0.4);
+    c.strokeStyle = 'rgba(0,30,10,0.7)'; c.lineWidth = 1;
+    c.fillStyle = curve(c, x + w * 0.2, w * 0.6, body); rr(c, x + w * 0.2, y + h * 0.02, w * 0.6, h * 0.25, w * 0.24); c.fill(); c.stroke();
+    c.fillStyle = curve(c, x, w, body); rr(c, x, y + h * 0.15, w, h * 0.83, w * 0.28); c.fill(); c.stroke();
+    glass(c, x + w * 0.15, y + h * 0.18, w * 0.7, h * 0.11, w * 0.07);
+    const rx = x + w * 0.05, ry = y + h * 0.31, rw = w * 0.9, rh = h * 0.62;
+    c.fillStyle = '#063d1c'; rr(c, rx, ry + dp * 0.25, rw, rh + dp * 0.35, w * 0.18); c.fill();
+    c.fillStyle = curve(c, rx, rw, '#0b7a37'); rr(c, rx, ry, rw, rh, w * 0.18); c.fill();
+    c.save(); rr(c, rx, ry, rw, rh, w * 0.18); c.clip();
+    c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 1;
+    for (let yy = ry + 2; yy < ry + rh; yy += 3.5) {
+      c.beginPath(); c.moveTo(rx, yy); c.lineTo(rx + rw * 0.15, yy); c.moveTo(rx + rw * 0.85, yy); c.lineTo(rx + rw, yy); c.stroke();
+    }
+    c.strokeStyle = 'rgba(210,230,215,0.35)';
+    c.beginPath(); c.moveTo(rx + rw * 0.15, ry); c.lineTo(rx + rw * 0.15, ry + rh); c.moveTo(rx + rw * 0.85, ry); c.lineTo(rx + rw * 0.85, ry + rh); c.stroke();
+    c.strokeStyle = 'rgba(200,255,220,0.22)';
+    c.beginPath(); c.moveTo(rx + rw * 0.5, ry); c.lineTo(rx + rw * 0.5, ry + rh); c.stroke();
+    c.restore();
+    c.fillStyle = '#fffbe0'; dot(c, 0, y + h * 0.05, w * 0.06);
+    if (o && o.warn > 0 && Math.floor(t * 8) % 2 === 0) {
+      c.fillStyle = '#ffb300';
+      const side = o.nextLane < o.targetLane ? x : x + w;
+      dot(c, side, y + h * 0.2, w * 0.1);
+      dot(c, side, y + h + dp * 0.3, w * 0.1);
+    }
+  }
+
+  // Local bus: tall body, side windows, dented roof, route lettering, rear plate.
+  function drawBus(c, w, h, o) {
+    const x = -w / 2, y = -h / 2, dp = w * 0.34, col = o.color;
+    softShadow(c, x, y, w, h + dp, w * 0.12, 8, 13);
+    c.fillStyle = '#0b0b0e';
+    for (const ay of [0.13, 0.76]) {
+      rr(c, x - w * 0.05, y + h * ay, w * 0.08, h * 0.11, 3); c.fill();
+      rr(c, x + w * 0.97, y + h * ay, w * 0.08, h * 0.11, 3); c.fill();
+    }
+    c.strokeStyle = '#1b1b1f'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(x, y + h * 0.03); c.lineTo(x - w * 0.12, y); c.moveTo(x + w, y + h * 0.03); c.lineTo(x + w * 1.12, y); c.stroke();
+    c.fillStyle = '#1b1b1f';
+    rr(c, x - w * 0.17, y - h * 0.02, w * 0.08, h * 0.035, 2); c.fill();
+    rr(c, x + w * 1.09, y - h * 0.02, w * 0.08, h * 0.035, 2); c.fill();
+    // walls + rear face
+    c.fillStyle = shade(col, -0.42); rr(c, x, y, w, h + dp, w * 0.12); c.fill();
+    const fy = y + h;
+    glass(c, x + w * 0.08, fy + dp * 0.06, w * 0.84, dp * 0.36, 3);
+    c.fillStyle = shade(col, -0.42); c.fillRect(x + w * 0.49, fy + dp * 0.06, w * 0.02, dp * 0.36);
+    c.fillStyle = o.stripe; c.fillRect(x + w * 0.02, fy + dp * 0.47, w * 0.96, dp * 0.06);
+    tailLight(c, x + w * 0.05, fy + dp * 0.58, w * 0.12, dp * 0.22);
+    tailLight(c, x + w * 0.83, fy + dp * 0.58, w * 0.12, dp * 0.22);
+    plate(c, 0, fy + dp * 0.69, w * 0.42, dp * 0.19, 'ঢাকা মেট্রো-ব');
+    c.fillStyle = '#1f1f23'; rr(c, x + w * 0.02, fy + dp * 0.85, w * 0.96, dp * 0.13, 2); c.fill();
+    // roof
+    c.fillStyle = curve(c, x, w, col, 0.8); rr(c, x, y, w, h, w * 0.12); c.fill();
+    c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 1; c.stroke();
+    // side windows seen past the roof edge, split by pillars
+    for (const sx of [x + w * 0.015, x + w * 0.885]) {
+      glass(c, sx, y + h * 0.08, w * 0.1, h * 0.86, 2);
+      c.fillStyle = shade(col, -0.25);
+      for (let yy = y + h * 0.08; yy < y + h * 0.94; yy += h * 0.085) c.fillRect(sx, yy, w * 0.1, Math.max(1.5, h * 0.012));
+    }
+    glass(c, x + w * 0.08, y + h * 0.01, w * 0.84, h * 0.045, w * 0.05);
+    c.fillStyle = 'rgba(255,255,255,0.08)'; rr(c, x + w * 0.15, y + h * 0.07, w * 0.7, h * 0.88, w * 0.05); c.fill();
+    c.strokeStyle = 'rgba(0,0,0,0.16)'; c.lineWidth = 1;
+    for (let yy = y + h * 0.14; yy < y + h * 0.95; yy += h * 0.11) { c.beginPath(); c.moveTo(x + w * 0.15, yy); c.lineTo(x + w * 0.85, yy); c.stroke(); }
+    c.fillStyle = o.stripe;
+    c.fillRect(x + w * 0.17, y + h * 0.07, w * 0.035, h * 0.88);
+    c.fillRect(x + w * 0.795, y + h * 0.07, w * 0.035, h * 0.88);
+    // roof vent: a little box (top face + darker front face)
+    c.fillStyle = '#5f646b'; rr(c, x + w * 0.3, y + h * 0.9 + h * 0.035, w * 0.4, h * 0.022, 2); c.fill();
+    c.fillStyle = curve(c, x + w * 0.3, w * 0.4, '#a9aeb4', 0.6); rr(c, x + w * 0.3, y + h * 0.895, w * 0.4, h * 0.04, 2); c.fill();
+
+    // lettering: route number up front, company + endpoints along the roof
+    const line = o.line, ink = line.ink || '#ffffff';
+    const fit = (txt, weight, size, maxLen) => {
+      c.font = `${weight} ${size}px 'Baloo Da 2', 'Hind Siliguri', sans-serif`;
+      const m = c.measureText(txt).width;
+      if (m > maxLen) c.font = `${weight} ${Math.max(6, Math.floor(size * maxLen / m))}px 'Baloo Da 2', 'Hind Siliguri', sans-serif`;
+    };
+    c.fillStyle = ink; c.textAlign = 'center'; c.textBaseline = 'middle';
+    if (line.no) { fit(line.no, 800, Math.round(w * 0.38), w * 0.6); c.fillText(line.no, 0, y + h * 0.15); }
+    c.save(); c.translate(0, y + h * 0.55); c.rotate(-Math.PI / 2);
+    fit(line.bn, 800, Math.round(w * 0.27), h * 0.58);
+    c.fillText(line.bn, 0, -w * 0.12);
+    const route = `${line.from} ⇄ ${line.to}`;
+    fit(route, 600, Math.round(w * 0.18), h * 0.6);
+    c.globalAlpha = 0.9; c.fillText(route, 0, w * 0.17); c.globalAlpha = 1;
+    c.restore();
+    // dents and scrapes
+    c.strokeStyle = 'rgba(0,0,0,0.3)'; c.lineWidth = 1.2;
+    for (const d of o.dents) { c.beginPath(); c.arc(x + w * d[0], y + h * d[1], w * 0.08, d[2], d[2] + 1.6); c.stroke(); }
+  }
+
+  function drawPothole(c, w, h, o) {
+    const pts = o.pts;
+    const shape = (s) => {
+      c.beginPath();
+      for (let i = 0; i < pts.length; i++) {
+        const a = (i / pts.length) * Math.PI * 2;
+        const px = Math.cos(a) * (w / 2) * pts[i] * s, py = Math.sin(a) * (h / 2) * pts[i] * s;
+        i ? c.lineTo(px, py) : c.moveTo(px, py);
+      }
+      c.closePath();
+    };
+    shape(1.08); c.fillStyle = 'rgba(160,150,135,0.35)'; c.fill();
+    shape(1); c.fillStyle = '#18191e'; c.fill();
+    shape(0.62); c.fillStyle = '#0b0c10'; c.fill();
+    c.fillStyle = 'rgba(127,215,255,0.16)';
+    c.beginPath(); c.ellipse(-w * 0.08, -h * 0.05, w * 0.18, h * 0.14, 0, 0, Math.PI * 2); c.fill();
+  }
+
+  function drawBattery(c, w, h, t) {
+    const x = -w / 2, y = -h / 2;
+    const pulse = 1 + Math.sin(t * 6) * 0.12;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, w * 1.25 * pulse);
+    g.addColorStop(0, 'rgba(62,224,122,0.5)'); g.addColorStop(1, 'rgba(62,224,122,0)');
+    c.fillStyle = g; dot(c, 0, 0, w * 1.25 * pulse);
+    c.restore();
+    c.fillStyle = '#c9d3da'; rr(c, -w * 0.18, y - h * 0.08, w * 0.36, h * 0.12, 2); c.fill();
+    c.fillStyle = '#13202b'; c.strokeStyle = '#3ee07a'; c.lineWidth = 2;
+    rr(c, x, y, w, h, w * 0.16); c.fill(); c.stroke();
+    c.fillStyle = '#3ee07a';
+    for (let i = 0; i < 3; i++) rr(c, x + w * 0.16, y + h * (0.12 + i * 0.27), w * 0.68, h * 0.21, 2), c.fill();
+    c.fillStyle = '#ffd21f'; c.strokeStyle = '#13202b'; c.lineWidth = 1.2;
+    c.beginPath();
+    c.moveTo(w * 0.08, y + h * 0.1); c.lineTo(-w * 0.22, h * 0.04); c.lineTo(-w * 0.02, h * 0.04);
+    c.lineTo(-w * 0.1, y + h * 0.92); c.lineTo(w * 0.24, -h * 0.04); c.lineTo(w * 0.03, -h * 0.04);
+    c.closePath(); c.fill(); c.stroke();
+  }
+
+  // Pedestrian seen from above, facing the way they walk (dir 1 = right).
+  function drawWalker(c, s, o) {
+    c.save();
+    if (o.hit) {
+      // knocked flat
+      c.rotate(o.dir > 0 ? 1.3 : -1.3);
+      c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(3, 4, s * 0.55, s * 0.28, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = o.cloth; c.beginPath(); c.ellipse(0, 0, s * 0.42, s * 0.22, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#c68a5e'; dot(c, s * 0.45, 0, s * 0.13);
+      c.fillStyle = '#1b1310'; dot(c, s * 0.5, 0, s * 0.1);
+      c.restore(); return;
+    }
+    if (o.dir < 0) c.scale(-1, 1);
+    const swing = Math.sin(o.phase) * s * 0.22;
+    c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(3, 4, s * 0.3, s * 0.45, 0, 0, Math.PI * 2); c.fill();
+    // feet stepping along the direction of travel
+    c.fillStyle = '#2b1d16';
+    c.beginPath(); c.ellipse(swing, -s * 0.13, s * 0.12, s * 0.07, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.ellipse(-swing, s * 0.13, s * 0.12, s * 0.07, 0, 0, Math.PI * 2); c.fill();
+    // shoulders + clothes (lungi / sari / shirt colours)
+    c.fillStyle = o.cloth; c.beginPath(); c.ellipse(0, 0, s * 0.2, s * 0.42, 0, 0, Math.PI * 2); c.fill();
+    if (o.orna) { c.fillStyle = o.orna; c.fillRect(-s * 0.2, -s * 0.06, s * 0.4, s * 0.12); }
+    // arms swinging opposite to the feet
+    c.fillStyle = '#c68a5e';
+    dot(c, -swing * 0.8, -s * 0.4, s * 0.08); dot(c, swing * 0.8, s * 0.4, s * 0.08);
+    // head
+    c.fillStyle = '#1b1310'; dot(c, s * 0.02, 0, s * 0.17);
+    if (o.cap) { c.fillStyle = '#f5f5f5'; dot(c, s * 0.02, 0, s * 0.11); }
+    c.restore();
+  }
+
+  function drawVehicle(c, type, w, h, o, t) {
+    if (type === 'cycle') drawCycle(c, w, h, o);
+    else if (type === 'cng') drawCNG(c, w, h, o, t);
+    else if (type === 'bus') drawBus(c, w, h, o);
+    else if (type === 'car') drawCar(c, w, h, o);
+  }
+  function drawObstacle(c, o, t) {
+    c.save(); c.translate(o.x, o.y);
+    if (o.type === 'cross') { c.rotate(o.dir > 0 ? Math.PI / 2 : -Math.PI / 2); drawVehicle(c, o.base, o.bw, o.bh, o, t); c.restore(); return; }
+    c.rotate(Math.atan(slopeAt(o.y))); // follow the bend
+    if (o.type === 'walker') { drawWalker(c, o.w, o); c.restore(); return; }
+    if (o.type === 'cng') c.rotate(clamp(o.targetLane - o.lx, -1, 1) * 0.25);
+    if (o.type === 'pothole') drawPothole(c, o.w, o.h, o);
+    else drawVehicle(c, o.type, o.w, o.h, o, t);
+    c.restore();
+  }
+
+  /* =========================================================
+     CANVAS / LAYOUT
+     ========================================================= */
+  const game = document.getElementById('game');
+  const cv = document.getElementById('cv');
+  const mainCtx = cv.getContext('2d');
+  let ctx = mainCtx; // drawing target; swapped to the ground / overhead layers while they render
+  // Offscreen layers drawn in straight world space, then warped row by row into bends.
+  const gcv = document.createElement('canvas'), gctx = gcv.getContext('2d');
+  const ocv = document.createElement('canvas'), octx = ocv.getContext('2d');
+  let PADX = 0;
+  let W = 0, H = 0, DPR = 1, roadW = 0, roadX = 0, L = 0, FP = 0, bottomReserve = 0;
+  let asphalt = null, vignette = null;
+  const isTouch = matchMedia('(hover: none), (pointer: coarse)').matches;
+
+  /* =========================================================
+     ROUTES — real Dhaka corridors, stops in their real order.
+     Distances are scaled to about 40% so a route takes a few minutes.
+     Event kinds: start · stop (bus stop + sign) · junction (4/5-way, cross
+     traffic) · roundabout (island you must steer around) · finish.
+     ========================================================= */
+  const ROUTES = [
+    {
+      id: 'endless', en: 'Endless Mirpur Road', bn: 'অবিরাম মিরপুর রোড', from: 'Gabtoli', to: '∞',
+      blurb: 'No destination. Drive as far as you can for the global leaderboard.', endless: true,
+      speed: 1, curvy: 1, mix: null, events: [],
+    },
+    {
+      id: 'mirpur-road', en: 'Mirpur Road', bn: 'মিরপুর রোড', from: 'Gabtoli', to: 'Azimpur', seed: 11, speed: 1, curvy: 1.1,
+      blurb: 'The classic: Gabtoli down to Azimpur past Shyamoli, Asad Gate and Science Lab.',
+      mix: { cycle: 0.3, cng: 0.24, bus: 0.2, car: 0.12, pothole: 0.14, walker: 0.14 },
+      events: [
+        { at: 0, kind: 'start', bn: 'গাবতলী', en: 'Gabtoli' },
+        { at: 320, kind: 'junction', ways: 4, bn: 'টেকনিক্যাল মোড়', en: 'Technical' },
+        { at: 640, kind: 'stop', bn: 'কল্যাণপুর', en: 'Kallyanpur' },
+        { at: 960, kind: 'junction', ways: 4, bn: 'শ্যামলী', en: 'Shyamoli' },
+        { at: 1260, kind: 'stop', bn: 'কলেজ গেট', en: 'College Gate' },
+        { at: 1480, kind: 'junction', ways: 4, bn: 'আসাদ গেট', en: 'Asad Gate' },
+        { at: 1820, kind: 'stop', bn: 'কলাবাগান', en: 'Kalabagan' },
+        { at: 2160, kind: 'junction', ways: 5, bn: 'সায়েন্স ল্যাব', en: 'Science Lab' },
+        { at: 2460, kind: 'stop', bn: 'নিউ মার্কেট', en: 'New Market' },
+        { at: 2680, kind: 'stop', bn: 'নীলক্ষেত', en: 'Nilkhet' },
+        { at: 2950, kind: 'finish', bn: 'আজিমপুর', en: 'Azimpur' },
+      ],
+    },
+    {
+      id: 'rokeya', en: 'Mirpur 10 → Shahbagh', bn: 'মিরপুর ১০ → শাহবাগ', from: 'Mirpur 10', to: 'Shahbagh', seed: 23, speed: 1, curvy: 1, metro: true,
+      blurb: 'Begum Rokeya Sarani under the metro line, through Agargaon, Farmgate and Karwan Bazar.',
+      mix: { cycle: 0.22, cng: 0.24, bus: 0.24, car: 0.16, pothole: 0.12, walker: 0.14 },
+      events: [
+        { at: 0, kind: 'start', bn: 'মিরপুর ১০', en: 'Mirpur 10' },
+        { at: 150, kind: 'roundabout', monument: 'fountain', bn: 'মিরপুর ১০ গোলচত্বর', en: 'Mirpur 10 Circle' },
+        { at: 520, kind: 'stop', bn: 'কাজীপাড়া', en: 'Kazipara' },
+        { at: 840, kind: 'stop', bn: 'শেওড়াপাড়া', en: 'Shewrapara' },
+        { at: 1260, kind: 'junction', ways: 4, bn: 'আগারগাঁও', en: 'Agargaon' },
+        { at: 1760, kind: 'junction', ways: 4, bn: 'বিজয় সরণি', en: 'Bijoy Sarani' },
+        { at: 2200, kind: 'junction', ways: 5, bn: 'ফার্মগেট', en: 'Farmgate' },
+        { at: 2560, kind: 'stop', bn: 'কারওয়ান বাজার', en: 'Karwan Bazar' },
+        { at: 2820, kind: 'junction', ways: 4, bn: 'বাংলামোটর', en: 'Bangla Motor' },
+        { at: 3150, kind: 'finish', bn: 'শাহবাগ', en: 'Shahbagh' },
+      ],
+    },
+    {
+      id: 'airport', en: 'Airport Road', bn: 'এয়ারপোর্ট রোড', from: 'Uttara', to: 'Jahangir Gate', seed: 37, speed: 1.15, curvy: 0.6,
+      blurb: 'Fast and wide: Uttara past the airport, Kuril, Banani and Mohakhali. No cycle rickshaws allowed.',
+      mix: { cycle: 0, cng: 0.24, bus: 0.3, car: 0.3, pothole: 0.08, walker: 0.08 },
+      events: [
+        { at: 0, kind: 'start', bn: 'উত্তরা হাউস বিল্ডিং', en: 'Uttara House Building' },
+        { at: 300, kind: 'stop', bn: 'আজমপুর', en: 'Azampur' },
+        { at: 560, kind: 'junction', ways: 4, bn: 'জসীমউদ্দীন', en: 'Jashimuddin' },
+        { at: 1100, kind: 'stop', plane: true, bn: 'বিমানবন্দর', en: 'Airport' },
+        { at: 1500, kind: 'junction', ways: 4, bn: 'খিলক্ষেত', en: 'Khilkhet' },
+        { at: 1900, kind: 'junction', ways: 5, bn: 'কুড়িল বিশ্বরোড', en: 'Kuril Bishwa Road' },
+        { at: 2400, kind: 'junction', ways: 4, bn: 'বনানী কাকলী', en: 'Banani Kakoli' },
+        { at: 2850, kind: 'junction', ways: 4, bn: 'মহাখালী', en: 'Mohakhali' },
+        { at: 3200, kind: 'finish', bn: 'জাহাঙ্গীর গেট', en: 'Jahangir Gate' },
+      ],
+    },
+    {
+      id: 'gulshan', en: 'Gulshan → Rampura', bn: 'গুলশান → রামপুরা', from: 'Gulshan 2', to: 'Rampura', seed: 51, speed: 1, curvy: 1.2,
+      blurb: 'Two Gulshan circles, the link road to Badda, then Pragati Sarani down to Rampura Bridge.',
+      mix: { cycle: 0.14, cng: 0.24, bus: 0.16, car: 0.3, pothole: 0.1, walker: 0.12 },
+      events: [
+        { at: 0, kind: 'start', bn: 'গুলশান ২', en: 'Gulshan 2' },
+        { at: 150, kind: 'roundabout', monument: 'fountain', bn: 'গুলশান ২ গোলচত্বর', en: 'Gulshan 2 Circle' },
+        { at: 900, kind: 'roundabout', monument: 'garden', bn: 'গুলশান ১ গোলচত্বর', en: 'Gulshan 1 Circle' },
+        { at: 1350, kind: 'stop', bn: 'গুলশান-বাড্ডা লিংক রোড', en: 'Gulshan-Badda Link Road' },
+        { at: 1800, kind: 'junction', ways: 4, bn: 'বাড্ডা', en: 'Badda' },
+        { at: 2200, kind: 'stop', bn: 'মেরুল বাড্ডা', en: 'Merul Badda' },
+        { at: 2650, kind: 'junction', ways: 4, bn: 'রামপুরা', en: 'Rampura' },
+        { at: 2900, kind: 'finish', bn: 'রামপুরা ব্রিজ', en: 'Rampura Bridge' },
+      ],
+    },
+    {
+      id: 'old-dhaka', en: 'Motijheel → Sadarghat', bn: 'মতিঝিল → সদরঘাট', from: 'Shapla Chattar', to: 'Sadarghat', seed: 67, speed: 0.85, curvy: 1.7,
+      blurb: 'Old Dhaka: Shapla Chattar, Gulistan, Nawabpur and Bahadur Shah Park, down to the river. Rickshaws everywhere.',
+      mix: { cycle: 0.44, cng: 0.2, bus: 0.08, car: 0.06, pothole: 0.18, walker: 0.24 },
+      events: [
+        { at: 0, kind: 'start', bn: 'মতিঝিল', en: 'Motijheel' },
+        { at: 130, kind: 'roundabout', monument: 'shapla', bn: 'শাপলা চত্বর', en: 'Shapla Chattar' },
+        { at: 460, kind: 'junction', ways: 4, bn: 'দৈনিক বাংলা মোড়', en: 'Dainik Bangla' },
+        { at: 860, kind: 'junction', ways: 5, bn: 'গুলিস্তান জিরো পয়েন্ট', en: 'Gulistan Zero Point' },
+        { at: 1300, kind: 'stop', bn: 'নবাবপুর রোড', en: 'Nawabpur Road' },
+        { at: 1700, kind: 'junction', ways: 4, bn: 'রায়সাহেব বাজার', en: 'Rayshaheb Bazar' },
+        { at: 2000, kind: 'roundabout', monument: 'obelisk', bn: 'বাহাদুর শাহ পার্ক', en: 'Bahadur Shah Park' },
+        { at: 2350, kind: 'finish', bn: 'সদরঘাট', en: 'Sadarghat' },
+      ],
+    },
+  ];
+  const ROUTE_BY_ID = Object.fromEntries(ROUTES.map((r) => [r.id, r]));
+  for (const r of ROUTES) {
+    r.length = r.endless ? Infinity : r.events[r.events.length - 1].at;
+    r.bends = r.endless ? [] : buildBends(r);
+  }
+
+  // Small seeded RNG so each route bends the same way every time.
+  function mulberry32(a) {
+    return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  // Bends: [startMeter, lengthMeters, sidewaysShiftInLanes]. Kept clear of junctions and roundabouts.
+  function buildBends(route) {
+    const r = mulberry32(route.seed), out = [];
+    let m = 70;
+    while (m < route.length - 70) {
+      const len = 26 + r() * 38;
+      const mid = m + len / 2;
+      const near = route.events.some((e) => e.kind !== 'stop' && e.kind !== 'start' && Math.abs(e.at - mid) < len / 2 + 50);
+      if (!near) out.push([m, len, (r() < 0.5 ? -1 : 1) * (0.9 + r() * route.curvy * 1.4)]);
+      m += len + 25 + r() * 80;
+    }
+    return out;
+  }
+
+  /* ---- road geometry ----
+     World space is "straight": the road runs up the middle. Bends shift each
+     screen row sideways; the camera keeps your own position centred. */
+  const CSTEP = 6, CPAD = 220;
+  let curveTab = new Float32Array(0);
+  const pxPerM = () => H / CFG.metersPerScreen;
+  const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+  function activeRoute() { return ROUTE_BY_ID[S.routeRun] || ROUTE_BY_ID.endless; }
+  function bendAt(m) {
+    const r = activeRoute();
+    if (r.endless) return L * (1.5 * Math.sin(m / 70) + 0.6 * Math.sin(m / 29 + 1.3));
+    let s = 0;
+    for (const [at, len, amt] of r.bends) { if (m <= at) break; s += amt * L * smooth((m - at) / len); }
+    return s;
+  }
+  // meters along the route at a screen row
+  const trackAt = (y) => S.track + (P.y - y) / pxPerM();
+  function buildCurveTable() {
+    const n = Math.ceil((H + CPAD * 2) / CSTEP) + 2;
+    if (curveTab.length !== n) curveTab = new Float32Array(n);
+    const b0 = bendAt(S.track), lim = PADX * 0.92;
+    for (let i = 0; i < n; i++) curveTab[i] = clamp(bendAt(trackAt(i * CSTEP - CPAD)) - b0, -lim, lim);
+  }
+  function offY(y) {
+    const f = (y + CPAD) / CSTEP, i = Math.floor(f);
+    if (i < 0) return curveTab[0] || 0;
+    if (i >= curveTab.length - 1) return curveTab[curveTab.length - 1] || 0;
+    return curveTab[i] + (curveTab[i + 1] - curveTab[i]) * (f - i);
+  }
+  const slopeAt = (y) => (offY(y - 8) - offY(y + 8)) / 16;     // sideways drift per pixel travelled
+  const laneX = (lx, y) => W / 2 + offY(y) + (lx - (LANES - 1) / 2) * L;
+  const straightLane = (i) => roadX + L * (i + 0.5);            // for drawing in straight world space
+  const laneCenter = (i, y = P.y) => laneX(i, y);
+  const laneOf = (o) => clamp(Math.round(o.lx != null ? o.lx : (o.x - roadX) / L - 0.5), 0, LANES - 1);
+  function panOf(x) { return clamp((x - W / 2) / (W / 2), -1, 1) * 0.8; }
+
+  // Screen row of a route event (meters → pixels relative to the player)
+  const eventY = (ev) => P.y - (ev.at - S.track) * pxPerM();
+
+  function makeAsphalt() {
+    const s = 160, c = document.createElement('canvas'); c.width = c.height = s;
+    const g = c.getContext('2d');
+    g.fillStyle = '#2c2e37'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 900; i++) {
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.12)';
+      g.fillRect(Math.random() * s, Math.random() * s, rand(1, 2.5), rand(1, 2.5));
+    }
+    g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      g.beginPath(); let px = Math.random() * s, py = Math.random() * s; g.moveTo(px, py);
+      for (let j = 0; j < 4; j++) { px += rand(-14, 14); py += rand(4, 14); g.lineTo(px, py); }
+      g.stroke();
+    }
+    return gctx.createPattern(c, 'repeat');
+  }
+
+  function resize() {
+    const r = game.getBoundingClientRect();
+    W = Math.max(280, r.width); H = Math.max(360, r.height);
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    PADX = Math.ceil(W * 0.6);
+    gcv.width = ocv.width = Math.round((W + PADX * 2) * DPR); gcv.height = ocv.height = Math.round(H * DPR);
+    roadW = Math.min(W * 0.74, 440, H * 0.52);
+    L = roadW / LANES;
+    roadX = (W - roadW) / 2;
+    FP = Math.min(roadX * 0.3, L * 0.35);
+    const pad = document.getElementById('pad');
+    const besideRoad = W > H * 1.25 && roadX - FP > 190; // landscape: pads fit next to the road
+    bottomReserve = !isTouch ? 0 : besideRoad ? 12 : Math.min(170, H * 0.3);
+    P.w = L * 0.56; P.h = P.w * 1.62;
+    P.y = H - bottomReserve - P.h * 0.5 - L * 0.55;
+    asphalt = makeAsphalt();
+    buildCurveTable();
+    P.lx = P.lane; P.x = laneX(P.lx, P.y);
+    vignette = mainCtx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.3, W / 2, H * 0.55, Math.max(W, H) * 0.8);
+    vignette.addColorStop(0, 'rgba(10,6,24,0)'); vignette.addColorStop(1, 'rgba(10,6,24,0.6)');
+    for (const o of S.obstacles) if (TYPES[o.type]) { o.w = TYPES[o.type].w * L; o.h = TYPES[o.type].h * L; }
+    for (const it of S.items) { it.w = L * 0.36; it.h = L * 0.5; }
+    buildScenery();
+  }
+
+  /* =========================================================
+     STATE
+     ========================================================= */
+  const S = {
+    mode: 'start', t: 0, dist: 0, battery: 100, best: +(store.get('drr-best') || 0),
+    v: 0, scroll: 0, turbo: false, shake: 0, spawnT: 1, itemT: 2.5,
+    obstacles: [], items: [], particles: [], floaters: [],
+    buildings: { L: [], R: [] }, wires: [], reason: '', newBest: false, runId: 0,
+    marks: [], bridges: [], decor: [],
+    track: 0, runTime: 0, finished: false, finishTime: 0, evDone: new Set(), routeId: store.get('drr-route') || 'mirpur-road', routeRun: 'endless', raceRoute: null,
+    name: '', raceId: null, cdRace: null, cdAt: 0, lastRaceDist: 0,
+  };
+  const P = { lane: 1, lx: 1, x: 0, y: 0, w: 0, h: 0, tilt: 0, air: 0, cool: 0 };
+  // 0 on the road, 1 at the top of a hop
+  const airHeight = () => (P.air > 0 ? Math.sin(Math.PI * (1 - P.air / CFG.flyDur)) : 0);
+  const input = { turboKey: false, turboTouch: false };
+
+  /* =========================================================
+     SCENERY: rooftops + overhead wires & banners
+     ========================================================= */
+  function makeBuilding(yBottom) {
+    const h = L * rand(1.3, 3.1);
+    return {
+      y: yBottom - h, h, color: pick(ROOFS), inset: rand(0, 0.35),
+      hgt: rand(0.16, 0.36),                 // apparent height: how much wall shows
+      seed: (Math.random() * 1e6) | 0,
+      tanks: Math.random() < 0.8 ? 1 + ((Math.random() * 2) | 0) : 0,
+      ac: Math.random() < 0.6, dish: Math.random() < 0.3, tx: rand(0.2, 0.7), ty: rand(0.25, 0.6), gap: rand(3, 8),
+      stall: Math.random() < 0.3, stallCols: [pick(['#5c6f7a', '#6b6258', '#58665a', '#6e6a64']), '#b9b3a8'],
+    };
+  }
+  function makeWire(y) {
+    const r = Math.random();
+    return {
+      y, sag: rand(10, 26), seed: Math.random() * 10,
+      kind: r < 0.4 ? 'banner' : r < 0.75 ? 'bunting' : 'plain',
+      text: pick(BANNERS), color: pick(['#e8322b', '#008a5c', '#ffd21f', '#1e88e5', '#d81b60']),
+      lines: Array.from({ length: 4 + ((Math.random() * 3) | 0) }, () => [rand(-8, 8), rand(-10, 10), rand(-6, 14)]),
+      tangle: rand(0.2, 0.8),
+    };
+  }
+  // Paint on the asphalt: zebra crossings, Bangla road text, manholes, repair patches.
+  function makeMark(y) {
+    const kind = weighted([['zebra', 0.32], ['text', 0.2], ['manhole', 0.28], ['patch', 0.2]]);
+    return {
+      kind, y, lane: (Math.random() * LANES) | 0, seed: Math.random(), spawned: false,
+      wear: Array.from({ length: 24 }, () => rand(0.5, 0.95)),
+      text: pick(['ধীরে চলুন', 'সামনে স্কুল', 'বাস স্টপ', 'থামুন']),
+    };
+  }
+  // Foot over-bridge spanning the road, with people walking across it.
+  function makeBridge(y) {
+    return {
+      y,
+      people: Array.from({ length: 2 + ((Math.random() * 3) | 0) }, () => ({
+        x0: Math.random(), sp: rand(0.03, 0.06), dir: Math.random() < 0.5 ? 1 : -1, cloth: pick(PEOPLE_CLOTHES),
+        orna: Math.random() < 0.4 ? pick(PEOPLE_CLOTHES) : null,
+      })),
+    };
+  }
+  function buildScenery() {
+    for (const side of ['L', 'R']) {
+      const arr = []; let yb = H + L;
+      while (yb > -L * 4) { const b = makeBuilding(yb); arr.unshift(b); yb = b.y - b.gap; }
+      S.buildings[side] = arr;
+    }
+    S.wires = []; let y = H * 0.25;
+    while (y > -H) { S.wires.unshift(makeWire(y)); y -= rand(H * 0.45, H * 0.8); }
+    S.marks = []; y = H * 0.6;
+    while (y > -L * 2) { const m = makeMark(y); m.spawned = true; S.marks.unshift(m); y -= rand(H * 0.45, H * 1.1); }
+    S.bridges = [makeBridge(-H * rand(0.6, 1.4))];
+    S.decor = [];
+  }
+
+  // Lane coordinate of the footpath centre on the left (-1) or right (+1).
+  const footLx = (side) => (side < 0 ? -0.5 - FP / (2 * L) : LANES - 0.5 + FP / (2 * L));
+  function addWalker(dir, y, wait) {
+    const s = TYPES.walker.w * L;
+    const woman = Math.random() < 0.4;
+    S.obstacles.push({
+      type: 'walker', dir, lx: dir > 0 ? footLx(-1) : footLx(1), x: 0, y, w: s, h: s, f: 1,
+      vlx: dir * rand(0.5, 0.85), phase: Math.random() * 6, wait: wait || 0,
+      lane: dir > 0 ? 0 : LANES - 1, targetLane: 0, nextLane: 0, hit: false, shouted: false, bubbleT: 0, bubble: '',
+      cloth: pick(PEOPLE_CLOTHES), orna: woman ? pick(PEOPLE_CLOTHES) : null, cap: !woman && Math.random() < 0.35,
+    });
+  }
+  // A few people use the zebra crossing together, stepping off one after another.
+  function spawnCrowd(y) {
+    const n = 2 + ((Math.random() * 2) | 0);
+    const first = Math.random() < 0.5 ? 1 : -1;
+    for (let i = 0; i < n; i++) addWalker(i % 2 ? -first : first, y + rand(-L * 0.25, L * 0.25), i * rand(0.45, 0.9));
+  }
+
+  function scrollWorld(v, dt) {
+    S.scroll += v * dt;
+    for (const side of ['L', 'R']) {
+      const arr = S.buildings[side];
+      for (const b of arr) b.y += v * dt;
+      while (arr.length && arr[arr.length - 1].y > H) arr.pop();
+      while (!arr.length || arr[0].y > -L * 2) { const top = arr.length ? arr[0].y - arr[0].gap : H; arr.unshift(makeBuilding(top)); }
+    }
+    for (const w of S.wires) w.y += v * dt * 1.12; // overhead = slight parallax
+    while (S.wires.length && S.wires[S.wires.length - 1].y > H + 60) S.wires.pop();
+    while (!S.wires.length || S.wires[0].y > -40) {
+      const top = S.wires.length ? S.wires[0].y : 0;
+      S.wires.unshift(makeWire(top - rand(H * 0.45, H * 0.8)));
+    }
+    // road paint rides with the asphalt
+    for (const m of S.marks) {
+      m.y += v * dt;
+      if (m.kind === 'zebra' && !m.spawned && m.y > -L * 1.5) {
+        m.spawned = true;
+        if (S.mode === 'play' && S.dist > 60 && S.respawnT <= 0) spawnCrowd(m.y);
+      }
+    }
+    S.marks = S.marks.filter((m) => m.y < H + L * 2);
+    while (!S.marks.length || S.marks[0].y > -L * 2) {
+      const top = S.marks.length ? S.marks[0].y : H * 0.3;
+      S.marks.unshift(makeMark(top - rand(H * 0.45, H * 1.1)));
+    }
+    // over-bridges are overhead too
+    for (const b of S.bridges) b.y += v * dt * 1.12;
+    S.bridges = S.bridges.filter((b) => b.y < H + L * 3);
+    if (!S.bridges.length || S.bridges[0].y > -L * 3) {
+      const top = S.bridges.length ? S.bridges[0].y : 0;
+      S.bridges.unshift(makeBridge(top - rand(H * 2.2, H * 3.8)));
+    }
+    // people strolling on the footpaths
+    if (FP > 11) {
+      for (const p of S.decor) { p.y += (v - p.dir * p.sp) * dt; p.phase += dt * 8; }
+      S.decor = S.decor.filter((p) => p.y < H + 30 && p.y > -60);
+      if (S.decor.length < 14 && Math.random() < dt * 1.6) {
+        const side = Math.random() < 0.5 ? 'L' : 'R';
+        const cx = side === 'L' ? roadX - FP * 0.5 : roadX + roadW + FP * 0.5;
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        S.decor.push({ x: cx + rand(-FP * 0.18, FP * 0.18), y: dir > 0 && v < 1 ? H + 20 : -20, dir, sp: rand(18, 38), phase: Math.random() * 6,
+          cloth: pick(SIDE_CLOTHES), orna: Math.random() < 0.4 ? pick(SIDE_CLOTHES) : null, cap: Math.random() < 0.25 });
+      }
+    }
+  }
+
+  /* =========================================================
+     SPAWNING
+     ========================================================= */
+  function laneBusy(lane, y0, y1, except) {
+    for (const o of S.obstacles) {
+      if (o === except) continue;
+      const lanes = o.type === 'cng' ? [laneOf(o), o.targetLane, o.nextLane] : [o.lane];
+      if (!lanes.includes(lane)) continue;
+      if (o.y + o.h / 2 > y0 && o.y - o.h / 2 < y1) return true;
+    }
+    return false;
+  }
+
+  function spawnObstacle(prog) {
+    const mix = activeRoute().mix || { cycle: 0.3, cng: 0.25, bus: 0.16, car: 0.08, pothole: 0.17, walker: 0.14 };
+    const type = weighted([['cycle', mix.cycle], ['cng', mix.cng + prog * 0.05], ['bus', mix.bus + prog * 0.05], ['car', mix.car], ['pothole', mix.pothole], ['walker', mix.walker]]);
+    const def = TYPES[type];
+    if (type === 'walker') {
+      // jaywalker: steps off one footpath and crosses all four lanes
+      addWalker(Math.random() < 0.5 ? 1 : -1, -def.w * L, 0);
+      return true;
+    }
+    // Lanes with anything near the top of the screen count as blocked.
+    const blocked = new Set();
+    for (const o of S.obstacles) {
+      if (o.y - o.h / 2 < L * 3.6) {
+        blocked.add(o.type === 'cng' ? o.targetLane : o.lane);
+        if (o.type === 'cng') blocked.add(laneOf(o));
+      }
+    }
+    if (islandAhead()) { blocked.add(1); blocked.add(2); } // roundabout island: only the outer lanes go round
+    const free = [];
+    for (let i = 0; i < LANES; i++) if (!blocked.has(i)) free.push(i);
+    if (free.length <= 1) return false; // always leave an escape lane
+    const lane = pick(free);
+    const w = def.w * L, h = def.h * L;
+    const o = { type, lane, lx: lane, targetLane: lane, nextLane: lane, x: 0, y: -h / 2 - 10, w, h, f: def.f, hit: false };
+    if (type === 'car') { o.color = pick(CAR_COLORS); o.f *= rand(0.9, 1.1); }
+    if (type === 'cycle') { o.color = pick(HOODS); o.shirt = pick(SHIRTS); o.f *= rand(0.95, 1.05); }
+    if (type === 'cng') { o.dartT = rand(0.6, 1.4); o.warn = 0; }
+    if (type === 'bus') {
+      o.line = pick(BUS_LINES); o.color = o.line.col[0]; o.stripe = o.line.col[1];
+      if (Math.random() < 0.55) setTimeout(() => S.mode === 'play' && Sound.horn('bus', panOf(o.x), 0.55), rand(200, 900));
+      // the bus helper hanging off the door calls out the destination
+      if (Math.random() < 0.4) {
+        const dest = o.line.to, destRo = o.line.enRoute.split('–')[1] || o.line.enRoute;
+        const clip = 'bus_' + destRo.toLowerCase().replace(/[^a-z]/g, '');
+        setTimeout(() => S.mode === 'play' && Voice.say({ bn: `${dest}! ${dest}! ওঠেন, ওঠেন!`, ro: `${destRo}! ${destRo}! Uthen, uthen!`, clip }, { pan: panOf(o.x), vol: 0.75 }), 1100);
+      }
+      o.dents = Array.from({ length: 4 }, () => [rand(0.1, 0.9), rand(0.1, 0.9), rand(0, 6)]);
+    }
+    if (type === 'pothole') o.pts = Array.from({ length: 11 }, () => rand(0.72, 1.05));
+    S.obstacles.push(o);
+    return true;
+  }
+
+  function spawnItem() {
+    const lanes = [];
+    const island = islandAhead();
+    for (let i = 0; i < LANES; i++) if (!laneBusy(i, -L * 2.5, L * 2.5) && !(island && (i === 1 || i === 2))) lanes.push(i);
+    if (!lanes.length) return false;
+    const lane = pick(lanes);
+    S.items.push({ lane, lx: lane, x: 0, y: -L, w: L * 0.36, h: L * 0.5, seed: Math.random() * 6 });
+    return true;
+  }
+
+  /* =========================================================
+     FX
+     ========================================================= */
+  function burst(x, y, n, colors, speed, life, size) {
+    if (reduceMotion) n = Math.ceil(n / 3);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, s = rand(speed * 0.3, speed);
+      S.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life, max: life, color: pick(colors), size: rand(size * 0.5, size) });
+    }
+  }
+  function floater(x, y, text, color) { S.floaters.push({ x, y, text, color, life: 1 }); }
+
+  function updateFx(dt) {
+    for (const p of S.particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; p.life -= dt; }
+    S.particles = S.particles.filter((p) => p.life > 0);
+    for (const f of S.floaters) { f.y -= 55 * dt; f.life -= dt * 0.9; }
+    S.floaters = S.floaters.filter((f) => f.life > 0);
+    S.shake = Math.max(0, S.shake - dt * 40);
+  }
+
+  /* =========================================================
+     ROUTE GAMEPLAY: positions, junction traffic, roundabouts, finish
+     ========================================================= */
+  // Is a roundabout island coming up near the top of the screen?
+  function islandAhead() {
+    const r = activeRoute();
+    if (r.endless) return false;
+    for (const ev of r.events) {
+      if (ev.kind !== 'roundabout') continue;
+      const ey = eventY(ev);
+      if (ey > -L * 10 && ey < L * 5) return true;
+    }
+    return false;
+  }
+
+  // Turn lane-space positions into screen positions on the (possibly bending) road.
+  function placeEntities() {
+    for (const o of S.obstacles) o.x = o.type === 'cross' ? o.sx + offY(o.y) : laneX(o.lx, o.y);
+    for (const it of S.items) it.x = laneX(it.lx, it.y);
+    if (P.lx != null) P.x = laneX(P.lx, P.y);
+  }
+
+  // Side-road traffic crossing the junction. Bangladesh drives on the left, so
+  // traffic heading right uses the upper half of the side road.
+  function spawnCrossTraffic(ey, ways) {
+    const n = ways >= 5 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const base = pick(['cng', 'cycle', 'car', 'car']);
+      const def = TYPES[base];
+      const o = {
+        type: 'cross', base, dir, f: 1, hit: false, wait: i * rand(0.35, 0.8),
+        sx: dir > 0 ? roadX - L * 1.8 : roadX + roadW + L * 1.8,
+        y: ey + (dir > 0 ? -L * 0.5 : L * 0.5), x: 0, lane: 0,
+        w: def.h * L, h: def.w * L, bw: def.w * L, bh: def.h * L,
+        vx: dir * L * rand(2.2, 3.2),
+      };
+      if (base === 'cycle') { o.color = pick(HOODS); o.shirt = pick(SHIRTS); o.vx *= 0.6; }
+      if (base === 'car') o.color = pick(CAR_COLORS);
+      S.obstacles.push(o);
+      if (i === 0) Sound.horn(base === 'cng' ? 'cng' : 'car', dir > 0 ? -0.7 : 0.7, 0.6);
+    }
+  }
+
+  function routeEvents() {
+    const r = activeRoute();
+    if (r.endless || S.mode !== 'play') return;
+    r.events.forEach((ev, i) => {
+      if (ev.kind === 'start') return;
+      if (ev.kind === 'finish') { if (S.track >= ev.at) finishRun(ev); return; }
+      const ey = eventY(ev);
+      if (!S.evDone.has(i) && ey > -L * 3) {
+        S.evDone.add(i);
+        if (ev.kind === 'junction') {
+          spawnCrossTraffic(ey, ev.ways);
+          if (S.dist > 40) spawnCrowd(ey + L * 1.2 + L * 0.5);
+        }
+        if (ev.kind === 'roundabout') floater(W / 2, Math.max(150, P.y - L * 4), 'Roundabout! Keep to an outer lane', '#ffd21f');
+        if (ev.kind === 'stop' && Math.random() < 0.7) addWalker(Math.random() < 0.5 ? 1 : -1, ey + L * 0.5, 0.3);
+      }
+      // the roundabout island is solid: go round it (outer lanes) or hop over it
+      if (ev.kind === 'roundabout' && S.shield <= 0 && airHeight() <= 0.3 && S.respawnT <= 0) {
+        const ri = L * 0.95;
+        if (Math.abs(ey - P.y) < ri + P.h) {
+          const cx = laneX(1.5, ey);
+          const dx = Math.max(0, Math.abs(P.x - cx) - P.w * 0.38), dy = Math.max(0, Math.abs(P.y - ey) - P.h * 0.38);
+          if (dx * dx + dy * dy < ri * ri) loseLife(`You hit the ${ev.en} island.`, true);
+        }
+      }
+    });
+  }
+
+  function fmtTime(sec) { const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return `${m}:${String(s).padStart(2, '0')}`; }
+
+  // Reached the destination.
+  function finishRun(ev) {
+    if (S.mode !== 'play') return;
+    S.finished = true; S.finishTime = S.runTime;
+    S.mode = 'over'; S.turbo = false;
+    S.reason = `You reached ${ev.en} (${ev.bn}) in ${fmtTime(S.runTime)}.`;
+    const d = Math.floor(S.dist);
+    if (d > S.best) { S.best = d; S.newBest = true; store.set('drr-best', String(d)); }
+    burst(P.x, P.y - P.h, 40, ['#ffd21f', '#e8322b', '#008a5c', '#fff4d6'], 260, 1.1, 6);
+    Sound.sfx.start(); Sound.horn('player');
+    if (S.raceId) { MP.lastRace = S.raceId; S.lastRaceDist = d; MP.sendRace(true); }
+    LB.submit(d, S.raceId ? 'race' : 'solo');
+    const id = S.runId;
+    setTimeout(() => { if (S.runId === id && S.mode === 'over') showOver(); }, 900);
+  }
+
+  // Which route the next run uses: the host's pick in a race, otherwise yours.
+  function routeForRun(raceRoute) { return ROUTE_BY_ID[raceRoute] ? raceRoute : (ROUTE_BY_ID[S.routeId] ? S.routeId : 'endless'); }
+
+  /* ---- private car: sedan with glass front and back ---- */
+  function drawCar(c, w, h, o) {
+    const x = -w / 2, y = -h / 2, dp = h * 0.1, col = o.color || '#d8d8d8';
+    softShadow(c, x, y, w, h + dp, w * 0.28);
+    for (const ay of [0.14, 0.7]) { wheel(c, x - w * 0.06, y + h * ay, w * 0.14, h * 0.18); wheel(c, x + w * 0.92, y + h * ay, w * 0.14, h * 0.18); }
+    c.fillStyle = shade(col, -0.45); rr(c, x, y, w, h + dp, w * 0.3); c.fill();
+    tailLight(c, x + w * 0.06, y + h + dp * 0.1, w * 0.2, dp * 0.42);
+    tailLight(c, x + w * 0.74, y + h + dp * 0.1, w * 0.2, dp * 0.42);
+    plate(c, 0, y + h + dp * 0.36, w * 0.3, dp * 0.42);
+    c.fillStyle = curve(c, x, w, col); rr(c, x, y, w, h, w * 0.3); c.fill();
+    c.strokeStyle = 'rgba(0,0,0,0.45)'; c.lineWidth = 1; c.stroke();
+    glass(c, x + w * 0.12, y + h * 0.24, w * 0.76, h * 0.16, w * 0.12);     // windscreen
+    c.fillStyle = curve(c, x + w * 0.12, w * 0.76, shade(col, -0.08)); rr(c, x + w * 0.12, y + h * 0.4, w * 0.76, h * 0.32, w * 0.12); c.fill(); // roof
+    glass(c, x + w * 0.15, y + h * 0.72, w * 0.7, h * 0.12, w * 0.1);      // rear glass
+    c.fillStyle = '#fffbe0'; dot(c, x + w * 0.2, y + h * 0.03, w * 0.06); dot(c, x + w * 0.8, y + h * 0.03, w * 0.06);
+    c.fillStyle = '#16161a'; dot(c, x - w * 0.04, y + h * 0.3, w * 0.05); dot(c, x + w * 1.04, y + h * 0.3, w * 0.05);
+  }
+
+  /* =========================================================
+     GAME FLOW
+     ========================================================= */
+  // Every menu screen; only one is visible at a time.
+  function showScreen(name) {
+    for (const k of ['gate', 'lobby', 'room', 'over', 'pause']) ui[k].hidden = k !== name;
+    ui.countdown.hidden = true;
+    if (name) { ui.hud.hidden = name !== 'over' && name !== 'pause'; ui.pad.hidden = true; }
+  }
+
+  function startGame(raceId) {
+    S.raceId = typeof raceId === 'string' ? raceId : null;
+    S.runId++;
+    S.dist = 0; S.battery = 100; S.obstacles = []; S.items = []; S.particles = []; S.floaters = [];
+    S.spawnT = 0.9; S.itemT = 2.2; S.shake = 0; S.newBest = false;
+    S.hornT = rand(1.5, 3); S.lowT = 0; S.wasTurbo = false;
+    S.lives = CFG.lives; S.respawnT = 0; S.shield = 0; S.lifeReason = '';
+    Sound.init(); Sound.sfx.start();
+    P.lane = 1; P.lx = 1; P.tilt = 0; P.air = 0; P.cool = 0;
+    S.routeRun = routeForRun(S.raceId ? S.raceRoute : null);
+    S.track = 0; S.runTime = 0; S.finished = false; S.finishTime = 0; S.evDone = new Set();
+    input.turboKey = input.turboTouch = input.brakeKey = input.brakeTouch = false;
+    S.mode = 'play';
+    showScreen(null);
+    ui.hud.hidden = false; ui.pad.hidden = false;
+    ui.standings.hidden = !S.raceId;
+    MP.ghosts.clear();
+    MP.lobbyPresence(S.raceId ? 'racing' : 'solo');
+    if (S.raceId) MP.sendRace(true);
+  }
+
+  // A crash or flat battery costs one life. With lives left, the run keeps
+  // its distance, speed and position and resumes after a short pause.
+  function loseLife(reason, crash) {
+    if (S.mode !== 'play' || S.respawnT > 0) return;
+    if (S.lives <= 1) { S.lives = 0; endRun(`Out of lives. ${reason}`, crash); return; }
+    S.lives--;
+    S.lifeReason = reason; S.lifeCrash = crash === true;
+    S.respawnT = CFG.respawnDelay; S.turbo = false; P.air = 0;
+    input.turboKey = input.turboTouch = input.brakeKey = input.brakeTouch = false;
+    if (crash === 'walker') { S.shake = reduceMotion ? 0 : 8; } // the shout is the sound here
+    else if (crash) { burst(P.x, P.y - P.h * 0.4, 30, ['#ffd21f', '#ff8f00', '#e8322b', '#fff4d6', '#777'], 240, 0.8, 6); S.shake = reduceMotion ? 0 : 14; Sound.sfx.crash(); }
+    else { burst(P.x, P.y, 14, ['#7fd7ff', '#ffffff'], 120, 0.8, 4); Sound.sfx.flat(); }
+    floater(P.x, P.y - P.h, '−1 ❤', '#ff6b5e');
+  }
+
+  function respawn() {
+    // clear the patch of road around the tomtom so you don't respawn into a bus
+    S.obstacles = S.obstacles.filter((o) => (o.type === 'walker' && o.hit) || o.y + o.h / 2 < P.y - L * 3.2 || o.y - o.h / 2 > P.y + P.h);
+    S.battery = Math.max(S.battery, CFG.respawnBattery);
+    S.shield = CFG.shield; P.cool = 0;
+    for (const ev of activeRoute().events) {
+      if (ev.kind === 'roundabout' && Math.abs(eventY(ev) - P.y) < L * 3 && (P.lane === 1 || P.lane === 2)) { P.lane = P.lx < 1.5 ? 0 : 3; P.lx = P.lane; }
+    }
+    Sound.sfx.start();
+    floater(P.x, P.y - P.h * 0.8, 'BACK ON THE ROAD', '#7fd7ff');
+  }
+
+  function endRun(reason, crash) {
+    if (S.mode !== 'play') return;
+    S.mode = 'over'; S.reason = reason; S.turbo = false;
+    const d = Math.floor(S.dist);
+    if (d > S.best) { S.best = d; S.newBest = true; store.set('drr-best', String(d)); }
+    if (crash) { burst(P.x, P.y - P.h * 0.4, 36, ['#ffd21f', '#ff8f00', '#e8322b', '#fff4d6', '#777'], 260, 0.9, 6); S.shake = reduceMotion ? 0 : 16; Sound.sfx.crash(); }
+    else { burst(P.x, P.y, 14, ['#7fd7ff', '#ffffff'], 120, 0.8, 4); Sound.sfx.flat(); }
+    Sound.sfx.over();
+    if (S.raceId) { MP.lastRace = S.raceId; S.lastRaceDist = d; MP.sendRace(true); }
+    LB.submit(d, S.raceId ? 'race' : 'solo');
+    const id = S.runId;
+    setTimeout(() => { if (S.runId === id && S.mode === 'over') showOver(); }, 650);
+  }
+
+  function showOver() {
+    const race = !!S.raceId;
+    showScreen('over');
+    ui.reason.textContent = S.reason;
+    ui.overTitle.textContent = S.finished ? 'Route complete' : 'Game Over';
+    ui.overBn.textContent = S.finished ? 'পৌঁছে গেছেন!' : 'খেলা শেষ';
+    ui.finalDist.textContent = Math.floor(S.dist).toLocaleString('en-US');
+    ui.finalBest.textContent = S.best.toLocaleString('en-US');
+    ui.newBest.hidden = !S.newBest;
+    ui.tip.textContent = pick(TIPS);
+    ui.restart.hidden = race;
+    ui.back.textContent = race ? 'Back to room' : 'Back to lobby';
+    ui.raceBox.hidden = !race;
+    if (race) MP.renderRaceBox();
+    (race ? ui.back : ui.restart).focus({ preventScroll: true });
+  }
+
+  function backFromOver() {
+    if (S.raceId && MP.nr) { S.raceId = null; S.mode = 'start'; MP.sendIdle(); MP.showRoom(); }
+    else { S.raceId = null; S.mode = 'start'; showLobby(); }
+  }
+
+  function togglePause() {
+    if (S.raceId) return; // a race keeps running for everyone
+    if (S.mode === 'play') { S.mode = 'paused'; ui.pause.hidden = false; input.turboKey = input.turboTouch = input.brakeKey = input.brakeTouch = false; Sound.suspend(true); Voice.stop(); }
+    else if (S.mode === 'paused') { S.mode = 'play'; ui.pause.hidden = true; Sound.suspend(false); }
+  }
+
+  function steer(d) {
+    if (S.mode !== 'play') return;
+    const next = clamp(P.lane + d, 0, LANES - 1);
+    if (next !== P.lane) Sound.sfx.lane();
+    P.lane = next;
+  }
+
+  function honk() { if (S.mode === 'play') Sound.horn('player'); }
+
+  // Roadster Hop: cold-gas thrusters lift the tomtom over traffic for a moment.
+  function fly() {
+    if (S.mode !== 'play' || P.air > 0) return;
+    if (P.cool > 0 || S.battery <= CFG.flyCost + 1) { Sound.sfx.low(); return; }
+    P.air = CFG.flyDur; P.cool = CFG.flyCool;
+    S.battery -= CFG.flyCost;
+    floater(P.x, P.y - P.h * 0.8, 'ROADSTER HOP!', '#ffd21f');
+    floater(P.x, P.y - P.h * 0.2, `−${CFG.flyCost}%`, '#ff6b5e');
+    burst(P.x, P.y + P.h * 0.4, 18, ['#e6f7ff', '#ffffff', '#b0bec5'], 180, 0.5, 6);
+    Sound.sfx.fly();
+  }
+
+  function toggleMute() {
+    const m = Sound.toggleMute();
+    if (m) Voice.stop();
+    ui.mute.textContent = m ? '🔇 Sound off' : '🔊 Sound on';
+    ui.mute.setAttribute('aria-pressed', String(m));
+  }
+
+  /* =========================================================
+     UPDATE
+     ========================================================= */
+  const box = (x, y, w, h, s) => ({ l: x - (w * s) / 2, r: x + (w * s) / 2, t: y - (h * s) / 2, b: y + (h * s) / 2 });
+  const overlap = (a, b) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+
+  function update(dt) {
+    // Life lost: hold the road still, then respawn in place.
+    if (S.respawnT > 0) {
+      S.respawnT -= dt;
+      if (S.respawnT <= 0) { S.respawnT = 0; respawn(); }
+      return;
+    }
+    if (S.shield > 0) S.shield = Math.max(0, S.shield - dt);
+    const prog = Math.min(1, S.dist / CFG.rampMeters);
+    S.brake = input.brakeKey || input.brakeTouch;
+    S.turbo = !S.brake && (input.turboKey || input.turboTouch) && S.battery > 1;
+    if (S.brake && !S.wasBrake) Sound.sfx.brake();
+    S.wasBrake = S.brake;
+    // ease toward the target speed so braking and boosting feel physical
+    const target = S.brake ? CFG.brakeMult : S.turbo ? CFG.turboMult : 1;
+    S.mult = S.mult == null ? 1 : S.mult + (target - S.mult) * Math.min(1, dt * (S.brake ? 5 : 3));
+    const mult = S.mult;
+    const cruise = (CFG.vBase + (CFG.vMax - CFG.vBase) * prog) * activeRoute().speed; // normal traffic speed
+    const vRel = cruise * mult;
+    const v = vRel * H, vCruise = cruise * H;
+    S.v = v; S.vRel = vRel;
+    if (S.turbo && !S.wasTurbo) Sound.sfx.turbo();
+    S.wasTurbo = S.turbo;
+    // ambient street honking from all around
+    S.hornT -= dt;
+    if (S.hornT <= 0) { Sound.horn(pick(['car', 'car', 'bus', 'cng', 'cng', 'bell']), rand(-0.9, 0.9), 0.35); S.hornT = rand(1.8, 5); }
+    S.dist += vRel * CFG.metersPerScreen * dt;
+    S.track += vRel * CFG.metersPerScreen * dt; // position along the route (pedestrian penalties don't move you back)
+    S.runTime += dt;
+    S.battery -= (S.turbo ? CFG.drainTurbo : S.brake ? CFG.drainBrake : CFG.drain) * dt;
+    scrollWorld(v, dt);
+
+    // Player glides toward its lane and leans into the turn.
+    P.lx += (P.lane - P.lx) * Math.min(1, dt * 13);
+    P.x = laneX(P.lx, P.y);
+    P.tilt = clamp(P.lane - P.lx, -1, 1) * 0.3;
+
+    // Flight timer, thruster puffs and landing
+    if (P.air > 0) {
+      P.air -= dt;
+      const hg = airHeight();
+      for (const sx of [-0.45, 0.45]) for (const sy of [-0.35, 0.4]) {
+        if (Math.random() < 0.6) S.particles.push({
+          x: P.x + P.w * sx * (1 + hg * 0.4), y: P.y - hg * L * 0.5 + P.h * sy * (1 + hg * 0.4),
+          vx: sx * rand(40, 110), vy: rand(60, 160), life: 0.35, max: 0.35,
+          color: Math.random() < 0.7 ? '#e6f7ff' : '#7fd7ff', size: rand(2.5, 5.5),
+        });
+      }
+      if (P.air <= 0) {
+        P.air = 0;
+        Sound.sfx.land();
+        burst(P.x, P.y + P.h * 0.3, 14, ['#8d8172', '#c9b8a6', '#ffffff'], 140, 0.45, 5);
+        S.shake = reduceMotion ? 0 : 5;
+      }
+    } else if (P.cool > 0) P.cool = Math.max(0, P.cool - dt);
+
+    // Obstacles
+    for (const o of S.obstacles) {
+      o.y += (v - (1 - o.f) * vCruise) * dt;
+      if (o.type === 'cng') {
+        if (o.warn > 0) {
+          o.warn -= dt;
+          if (o.warn <= 0) o.targetLane = o.nextLane;
+        } else if (o.y < P.y - L * 3.6 && o.y > 0) {
+          o.dartT -= dt;
+          if (o.dartT <= 0) {
+            o.dartT = rand(0.9, 2) * (1 - prog * 0.35);
+            const opts = [o.targetLane - 1, o.targetLane + 1].filter((l) => l >= 0 && l < LANES && !laneBusy(l, o.y - o.h * 1.5, o.y + o.h * 1.5, o));
+            if (opts.length) {
+              o.nextLane = pick(opts); o.warn = 0.5; Sound.horn('cng', panOf(o.x), 0.75);
+              if (Math.random() < 0.2) Voice.say(CALL_CNG, { pan: panOf(o.x), vol: 0.8 });
+            }
+          }
+        }
+      }
+      // rickshaw-wallahs ring their bell (and shout "side!") as you close in
+      if (o.type === 'cycle' && !o.rang && o.y > P.y - L * 2.8 && Math.abs(o.x - P.x) < L * 1.6) {
+        o.rang = true; Sound.horn('bell', panOf(o.x), 0.9);
+        if (Math.random() < 0.4) Voice.say(CALL_SIDE, { pan: panOf(o.x), vol: 0.8 });
+      }
+      if (o.type === 'walker') {
+        if (o.bubbleT > 0) o.bubbleT -= dt;
+        if (o.wait > 0) o.wait -= dt;
+        else if (!o.hit && o.vlx) {
+          o.phase += dt * 10;
+          o.lx += o.vlx * dt;
+          const far = footLx(o.dir);
+          if ((o.dir > 0 && o.lx >= far) || (o.dir < 0 && o.lx <= far)) { o.lx = far; o.vlx = 0; o.phase = 0; }
+        }
+      }
+      if (o.type === 'cross') {
+        // cross traffic at a junction drives along the side road
+        if (o.wait > 0) o.wait -= dt; else o.sx += o.vx * dt;
+      } else if (o.type !== 'walker' && o.type !== 'pothole') {
+        // vehicles steer round roundabout islands and ease into their target lane
+        for (const ev of activeRoute().events) {
+          if (ev.kind !== 'roundabout') continue;
+          const gap = eventY(ev) - o.y;
+          if (gap > -L * 1.5 && gap < L * 8 && Math.abs(o.targetLane - 1.5) < 1) { o.targetLane = o.lx < 1.5 ? 0 : 3; o.nextLane = o.targetLane; }
+        }
+        o.lx += (o.targetLane - o.lx) * Math.min(1, dt * (o.type === 'cng' ? 3.4 : 2.4));
+      }
+      o.lane = laneOf(o);
+    }
+    S.obstacles = S.obstacles.filter((o) => o.type !== 'cross' || (o.sx > -PADX && o.sx < W + PADX));
+    // Queue vehicles in the same lane so faster ones don't drive through slower ones.
+    const vehicles = S.obstacles.filter((o) => o.type !== 'pothole' && o.type !== 'walker' && o.type !== 'cross');
+    for (const o of vehicles) for (const p of vehicles) {
+      if (o !== p && laneOf(o) === laneOf(p) && o.y < p.y) {
+        const gap = (o.h + p.h) / 2 + L * 0.25;
+        if (p.y - o.y < gap) o.y = p.y - gap;
+      }
+    }
+    S.obstacles = S.obstacles.filter((o) => o.y - o.h / 2 < H + 20 && o.y + o.h / 2 > -H * 0.9);
+
+    for (const it of S.items) it.y += v * dt;
+    S.items = S.items.filter((it) => it.y - it.h < H + 20);
+    placeEntities();
+    routeEvents(dt);
+    if (S.mode !== 'play') return;
+
+    // Spawning (scaled with turbo so density per meter stays fair)
+    S.spawnT -= dt * Math.max(0.15, mult);
+    if (S.spawnT <= 0) S.spawnT = spawnObstacle(prog) ? lerp(1.1, 0.5, prog) * rand(0.75, 1.25) : 0.15;
+    S.itemT -= dt * mult;
+    if (S.itemT <= 0) S.itemT = spawnItem() ? rand(2.2, 3.6) + prog * 1.4 : 0.3;
+
+    // Collisions
+    const pb = box(P.x, P.y, P.w, P.h, 0.8);
+    const high = airHeight() > 0.3; // up in the air: clear of traffic, can't grab packs
+    for (const it of S.items) {
+      if (!high && !it.taken && overlap(pb, box(it.x, it.y, it.w, it.h, 1.1))) {
+        it.taken = true;
+        S.battery = Math.min(100, S.battery + CFG.pack);
+        burst(it.x, it.y, 16, ['#3ee07a', '#ffd21f', '#ffffff'], 160, 0.55, 4);
+        floater(it.x, it.y - 10, `+${CFG.pack}%`, '#3ee07a');
+        Sound.sfx.pickup();
+      }
+    }
+    S.items = S.items.filter((it) => !it.taken);
+
+    for (const o of S.obstacles) {
+      if (o.hit || high || S.shield > 0) continue;
+      const shrink = o.type === 'pothole' ? 0.7 : o.type === 'walker' ? 0.8 : 0.86;
+      if (overlap(pb, box(o.x, o.y, o.w, o.h, shrink))) {
+        if (o.type === 'walker') {
+          o.hit = true; o.vx = 0;
+          o.bubble = pick(SHOUT_HIT); o.bubbleT = 2.6;
+          Sound.sfx.thump();
+          const pen = Math.min(CFG.walkerPenalty, Math.floor(S.dist));
+          S.dist -= pen;
+          floater(o.x, o.y - L * 0.6, `−${pen} m`, '#ff6b5e');
+          S.shake = reduceMotion ? 0 : 8;
+          burst(o.x, o.y, 10, ['#fff4d6', '#c68a5e', o.cloth], 120, 0.5, 4);
+          continue; // no life lost: the penalty is distance
+        }
+        if (o.type === 'pothole') {
+          o.hit = true;
+          S.battery -= CFG.potholeCost;
+          S.shake = reduceMotion ? 0 : 9;
+          burst(o.x, o.y, 10, ['#8d8172', '#5a5148', '#7fd7ff'], 120, 0.5, 4);
+          floater(P.x, P.y - P.h * 0.6, `−${CFG.potholeCost}%`, '#ff6b5e');
+          Sound.sfx.pothole();
+        } else {
+          loseLife(o.type === 'bus' ? `You crashed into a ${o.line.en} bus (${o.line.enRoute}).` : `You crashed into ${TYPES[o.base || o.type].name}${o.type === 'cross' ? ' at the junction' : ''}.`, true);
+          return;
+        }
+      }
+    }
+
+    // near miss: pedestrians you brush past yell at you
+    for (const o of S.obstacles) {
+      if (o.type !== 'walker' || o.hit || o.shouted) continue;
+      if (Math.abs(o.y - P.y) < L * 0.75 && Math.abs(o.x - P.x) < L * 0.95) {
+        o.shouted = true; o.bubble = pick(SHOUT_NEAR); o.bubbleT = 2;
+        Voice.say(o.bubble, { pri: 2, female: !!o.orna, pan: panOf(o.x), rate: rand(0.97, 1.08) });
+      }
+    }
+
+    if (S.battery <= 0) { S.battery = 0; loseLife('Your battery ran flat.', false); return; }
+    if (S.battery < 20) { S.lowT -= dt; if (S.lowT <= 0) { Sound.sfx.low(); S.lowT = 0.9; } }
+
+    // Turbo exhaust sparks
+    if (S.turbo) {
+      for (let i = 0; i < 2; i++) {
+        S.particles.push({
+          x: P.x + rand(-P.w * 0.35, P.w * 0.35), y: P.y + P.h * 0.5, vx: rand(-30, 30), vy: rand(140, 260),
+          life: 0.35, max: 0.35, color: Math.random() < 0.6 ? '#7fd7ff' : '#ffffff', size: rand(1.5, 3.5),
+        });
+      }
+    }
+  }
+
+  /* =========================================================
+     RENDER
+     ========================================================= */
+  // Cheap stable hash for per-building details (which windows are lit, etc.)
+  const hash01 = (a, b) => { let x = (a * 374761393 + b * 668265263) | 0; x = (x ^ (x >>> 13)) * 1274126177; return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
+
+  // One building: roof, the wall facing the road, the wall facing the camera, lit windows.
+  function drawBuilding(side, b, sideW) {
+    const bw = sideW * (1 - b.inset * 0.6);
+    const x = side === 'L' ? sideW - bw : roadX + roadW + FP;
+    const ht = b.hgt * L;
+    const fw = Math.min(ht, bw * 0.42);       // road-facing wall
+    const fh = Math.min(ht * 0.75, b.h * 0.3); // camera-facing wall
+    const wallX = side === 'L' ? x + bw - fw : x;
+    const roofX = side === 'L' ? x : x + fw, rw = bw - fw, rh = b.h - fh;
+    const roof = shade(b.color, -0.12);
+    ctx.fillStyle = shade(b.color, -0.32);   // older blocks further from the road
+    if (side === 'L') ctx.fillRect(-PADX, b.y, x + PADX - 2, b.h); else ctx.fillRect(x + bw + 2, b.y, W + PADX - x - bw, b.h);
+    // walls (left-side buildings' road walls face away from the light)
+    ctx.fillStyle = shade(b.color, side === 'L' ? -0.5 : -0.28); ctx.fillRect(wallX, b.y, fw, b.h);
+    ctx.fillStyle = shade(b.color, -0.38); ctx.fillRect(roofX, b.y + rh, rw, fh);
+    // windows: warm lit, dark, or the blue flicker of a TV
+    const win = (wx, wy, ww, wh, i) => {
+      const r = hash01(b.seed, i);
+      ctx.fillStyle = r < 0.22 ? '#b8995c' : '#1c1b20';
+      ctx.fillRect(wx, wy, ww, wh);
+    };
+    if (fw > 7) {
+      const step = Math.max(9, L * 0.3), ww = fw * 0.42;
+      let i = 0;
+      for (let wy = b.y + step * 0.4; wy < b.y + b.h - step * 0.5; wy += step) win(wallX + (fw - ww) / 2, wy, ww, step * 0.42, i++);
+    }
+    if (fh > 6 && rw > 12) {
+      const step = Math.max(11, L * 0.34), wh = fh * 0.42;
+      let i = 100;
+      for (let wx = roofX + step * 0.3; wx < roofX + rw - step * 0.5; wx += step) win(wx, b.y + rh + (fh - wh) / 2, step * 0.45, wh, i++);
+    }
+    // roof + parapet
+    ctx.fillStyle = roof; ctx.fillRect(roofX, b.y, rw, rh);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 3; ctx.strokeRect(roofX + 1.5, b.y + 1.5, rw - 3, rh - 3);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.strokeRect(roofX + 3.5, b.y + 3.5, rw - 7, rh - 7);
+    const s = Math.min(rw, L);
+    if (b.ac && rw > 14) {
+      ctx.fillStyle = '#5d6168'; ctx.fillRect(roofX + rw * 0.15, b.y + rh * 0.72 + s * 0.12, s * 0.22, s * 0.05);
+      ctx.fillStyle = '#9ba0a7'; ctx.fillRect(roofX + rw * 0.15, b.y + rh * 0.72, s * 0.22, s * 0.13);
+    }
+    if (b.dish && rw > 14) { ctx.fillStyle = '#eceff1'; ctx.beginPath(); ctx.ellipse(roofX + rw * 0.75, b.y + rh * 0.8, s * 0.09, s * 0.06, 0.6, 0, Math.PI * 2); ctx.fill(); }
+    // black water tanks: a short cylinder (side band + top)
+    for (let i = 0; i < b.tanks && rw > 12; i++) {
+      const cx = roofX + rw * clamp(b.tx + i * 0.24, 0.18, 0.82), cy = b.y + rh * b.ty, r = s * 0.12;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(cx + r * 0.5, cy + r * 1.1, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#0c0c0e'; ctx.fillRect(cx - r, cy, r * 2, r * 0.7);
+      ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.7, r, r * 0.45, 0, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = '#26262b'; ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.2)'; dot(ctx, cx - r * 0.35, cy - r * 0.1, r * 0.25);
+    }
+    // left-side buildings cast their shadow across the footpath
+    if (side === 'L') { ctx.fillStyle = 'rgba(10,6,20,0.3)'; ctx.fillRect(roadX - FP, b.y + fh * 0.5, Math.min(FP, ht * 0.9), b.h); }
+  }
+
+  // Tea-stall umbrella over the footpath, seen from above.
+  function drawUmbrella(cx, cy, r, cols) {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; dot(ctx, cx + r * 0.25, cy + r * 0.35, r);
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = cols[i % 2];
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, (i / 8) * Math.PI * 2, ((i + 1) / 8) * Math.PI * 2); ctx.closePath(); ctx.fill();
+    }
+    const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = g; dot(ctx, cx, cy, r);
+    ctx.fillStyle = '#3a3a3a'; dot(ctx, cx, cy, Math.max(1.5, r * 0.08));
+  }
+
+  function renderSides() {
+    ctx.fillStyle = '#1c1c1f'; ctx.fillRect(0, 0, roadX, H); ctx.fillRect(roadX + roadW, 0, W - roadX - roadW, H);
+    // footpaths with tile seams
+    ctx.fillStyle = '#766d66';
+    ctx.fillRect(roadX - FP, 0, FP, H); ctx.fillRect(roadX + roadW, 0, FP, H);
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 1;
+    const tile = L * 0.5, off = S.scroll % tile;
+    ctx.beginPath();
+    for (let y = off - tile; y < H; y += tile) {
+      ctx.moveTo(roadX - FP, y); ctx.lineTo(roadX, y);
+      ctx.moveTo(roadX + roadW, y); ctx.lineTo(roadX + roadW + FP, y);
+    }
+    ctx.stroke();
+    const sideW = roadX - FP;
+    if (sideW > 6) for (const side of ['L', 'R']) for (const b of S.buildings[side]) {
+      if (b.y > H || b.y + b.h < -L) continue;
+      drawBuilding(side, b, sideW);
+    }
+    // people on the footpath
+    const ps = Math.min(L * 0.3, FP * 0.95);
+    for (const p of S.decor) {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.dir > 0 ? -Math.PI / 2 : Math.PI / 2);
+      drawWalker(ctx, ps, { dir: 1, phase: p.phase, cloth: p.cloth, orna: p.orna, cap: p.cap });
+      ctx.restore();
+    }
+    // tea-stall umbrellas
+    if (FP > 8) for (const side of ['L', 'R']) for (const b of S.buildings[side]) {
+      if (!b.stall || b.y > H || b.y + b.h < -L) continue;
+      const cx = side === 'L' ? roadX - FP * 0.55 : roadX + roadW + FP * 0.55;
+      drawUmbrella(cx, b.y + b.h * 0.5, clamp(L * 0.3, 8, FP * 1.5), b.stallCols);
+    }
+    // painted black-and-yellow kerbs, with a little height on the road side
+    const seg = L * 0.4, coff = S.scroll % (seg * 2);
+    for (let y = coff - seg * 2; y < H; y += seg) {
+      ctx.fillStyle = Math.round((y - coff) / seg) % 2 === 0 ? '#ffd21f' : '#1c1c1f';
+      ctx.fillRect(roadX - 5, y, 5, seg); ctx.fillRect(roadX + roadW, y, 5, seg);
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(roadX, 0, 3, H); // kerb shadow on the asphalt
+  }
+
+  function renderRoad() {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(roadX, 0, roadW, H); ctx.clip();
+    ctx.translate(roadX, S.scroll % 160);
+    ctx.fillStyle = asphalt; ctx.fillRect(0, -160, roadW, H + 320);
+    ctx.restore();
+    // tyre-polished lane centres and oil-darkened wheel tracks
+    for (let i = 0; i < LANES; i++) {
+      const cx = straightLane(i);
+      ctx.fillStyle = 'rgba(0,0,0,0.13)'; ctx.fillRect(cx - L * 0.3, 0, L * 0.14, H); ctx.fillRect(cx + L * 0.16, 0, L * 0.14, H);
+      ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fillRect(cx - L * 0.06, 0, L * 0.12, H);
+    }
+    // lane dashes and edge lines
+    const period = L * 1.4, len = L * 0.7, off = S.scroll % period;
+    ctx.fillStyle = 'rgba(245,240,225,0.7)';
+    for (let k = 1; k < LANES; k++) {
+      const x = roadX + L * k;
+      for (let y = off - period; y < H; y += period) ctx.fillRect(x - 1.5, y, 3, len);
+    }
+    ctx.fillStyle = 'rgba(255,210,31,0.8)';
+    ctx.fillRect(roadX + 6, 0, 3, H); ctx.fillRect(roadX + roadW - 9, 0, 3, H);
+    // road paint
+    for (const m of S.marks) {
+      if (m.y < -L * 2 || m.y > H + L) continue;
+      if (m.kind === 'zebra') {
+        const zh = L * 0.95, n = Math.max(6, Math.floor(roadW / (L * 0.3))), sw = roadW / n;
+        ctx.fillStyle = '#2c2e37'; ctx.fillRect(roadX + 10, m.y - zh / 2 - 2, roadW - 20, zh + 4); // hides lane dashes under the crossing
+        for (let i = 0; i < n; i++) {
+          ctx.fillStyle = `rgba(240,238,228,${0.88 * m.wear[i % 24]})`;
+          ctx.fillRect(roadX + i * sw + sw * 0.2, m.y - zh / 2, sw * 0.6, zh);
+        }
+        ctx.fillStyle = 'rgba(240,238,228,0.72)';
+        ctx.fillRect(roadX + 10, m.y + zh / 2 + L * 0.35, roadW - 20, Math.max(3, L * 0.07)); // stop line
+      } else if (m.kind === 'text') {
+        ctx.save(); ctx.translate(straightLane(m.lane), m.y); ctx.scale(1, 1.9);
+        ctx.font = `800 ${Math.round(L * 0.2)}px 'Baloo Da 2', 'Hind Siliguri', sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(240,238,228,0.5)'; ctx.fillText(m.text, 0, 0, L * 0.85);
+        ctx.restore();
+      } else if (m.kind === 'manhole') {
+        const cx = straightLane(m.lane) + (m.seed - 0.5) * L * 0.5, r = L * 0.15;
+        ctx.fillStyle = '#18191d'; dot(ctx, cx, m.y, r * 1.15);
+        ctx.fillStyle = '#3b3c43'; dot(ctx, cx, m.y, r);
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let k = -2; k <= 2; k++) { ctx.moveTo(cx - r * 0.8, m.y + k * r * 0.3); ctx.lineTo(cx + r * 0.8, m.y + k * r * 0.3); }
+        ctx.stroke();
+      } else {
+        const cx = straightLane(m.lane) + (m.seed - 0.5) * L * 0.4;
+        ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.beginPath(); ctx.ellipse(cx, m.y, L * 0.32, L * 0.22, m.seed * 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(cx - L * 0.3, m.y - L * 0.18, L * 0.5, L * 0.3);
+      }
+    }
+  }
+
+  // Foot over-bridge: deck, front face with the classic sign, stairs, people on top.
+  function renderBridges() {
+    for (const b of S.bridges) {
+      if (b.y < -L * 3 || b.y > H + L * 2) continue;
+      const dh = L * 0.5, fh = L * 0.28, top = b.y, base = top + dh + fh;
+      ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(-PADX, base + L * 0.3, W + PADX * 2, dh * 0.95); // shadow on road and traffic
+      for (const px of [roadX - FP * 0.5, roadX + roadW + FP * 0.5]) {
+        ctx.fillStyle = '#6a655d'; ctx.fillRect(px - L * 0.07, base, L * 0.14, L * 0.45); // pillar
+      }
+      for (const sx of [roadX - FP, roadX + roadW]) { // stairs down to each footpath
+        const sw = Math.max(FP, 8), sh = L * 1.3;
+        ctx.fillStyle = '#8d877d'; ctx.fillRect(sx, base, sw, sh);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        for (let yy = base + 3; yy < base + sh; yy += 4) ctx.fillRect(sx, yy, sw, 1);
+        ctx.fillStyle = '#2f3136'; ctx.fillRect(sx, base, 1.5, sh); ctx.fillRect(sx + sw - 1.5, base, 1.5, sh);
+      }
+      // front face + sign
+      ctx.fillStyle = '#5c5750'; ctx.fillRect(-PADX, top + dh, W + PADX * 2, fh);
+      const fs = Math.max(9, Math.round(fh * 0.6));
+      ctx.font = `700 ${fs}px 'Hind Siliguri', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const label = 'ফুট ওভারব্রিজ ব্যবহার করুন';
+      const tw = Math.min(ctx.measureText(label).width + fs, roadW * 0.9);
+      ctx.fillStyle = '#0b6b3a'; rr(ctx, W / 2 - tw / 2, top + dh + fh * 0.1, tw, fh * 0.8, 3); ctx.fill();
+      ctx.strokeStyle = '#fff4d6'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#ffffff'; ctx.fillText(label, W / 2, top + dh + fh * 0.52, tw - fs * 0.6);
+      // deck
+      const g = ctx.createLinearGradient(0, top, 0, top + dh);
+      g.addColorStop(0, '#b6b0a6'); g.addColorStop(1, '#948e85');
+      ctx.fillStyle = g; ctx.fillRect(-PADX, top, W + PADX * 2, dh);
+      ctx.fillStyle = '#2f3136';
+      ctx.fillRect(-PADX, top, W + PADX * 2, 2.5); ctx.fillRect(-PADX, top + dh - 2.5, W + PADX * 2, 2.5);
+      for (let px = -PADX + 6; px < W + PADX; px += 14) { ctx.fillRect(px, top, 2, 5); ctx.fillRect(px, top + dh - 5, 2, 5); }
+      const ps = Math.min(L * 0.3, dh * 0.6);
+      for (const p of b.people) {
+        const u = (((p.x0 + S.t * p.sp * p.dir) % 1) + 1) % 1;
+        ctx.save(); ctx.translate(-PADX + u * (W + PADX * 2), top + dh * 0.5);
+        drawWalker(ctx, ps, { dir: p.dir, phase: S.t * 8 + p.x0 * 20, cloth: p.cloth, orna: p.orna });
+        ctx.restore();
+      }
+    }
+  }
+
+  /* =========================================================
+     ROUTE SCENERY (drawn in straight world space, then warped)
+     ========================================================= */
+  function asphaltBand(x, y, w, h) {
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.translate(0, S.scroll % 160); ctx.fillStyle = asphalt; ctx.fillRect(x, y - 160, w, h + 320);
+    ctx.restore();
+  }
+  function zebraAcross(y, zh) {
+    const n = Math.max(6, Math.floor(roadW / (L * 0.3))), sw = roadW / n;
+    ctx.fillStyle = 'rgba(240,238,228,0.85)';
+    for (let i = 0; i < n; i++) ctx.fillRect(roadX + i * sw + sw * 0.2, y - zh / 2, sw * 0.6, zh);
+  }
+  function zebraAlong(x, y, h) { // stripes across a side road
+    const n = Math.max(5, Math.floor(h / (L * 0.3))), sh = h / n;
+    ctx.fillStyle = 'rgba(240,238,228,0.8)';
+    for (let i = 0; i < n; i++) ctx.fillRect(x - L * 0.42, y + i * sh + sh * 0.2, L * 0.84, sh * 0.6);
+  }
+  function signalPole(x, y) {
+    const red = Math.floor(S.t / 3) % 2 === 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x + 2, y + 2, 5, 5);
+    ctx.fillStyle = '#26272b'; rr(ctx, x - 4, y - 9, 8, 18, 2); ctx.fill();
+    ctx.fillStyle = red ? '#ff3b30' : '#3a1210'; dot(ctx, x, y - 4, 2.4);
+    ctx.fillStyle = red ? '#0f2a16' : '#3ee07a'; dot(ctx, x, y + 4, 2.4);
+  }
+  // Traffic police box on the corner: a round podium under an umbrella.
+  function policeBox(x, y) {
+    const r = Math.max(6, L * 0.22);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; dot(ctx, x + 3, y + 4, r);
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = i % 2 ? '#f5f5f5' : '#c62828';
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r, (i / 8) * Math.PI * 2, ((i + 1) / 8) * Math.PI * 2); ctx.closePath(); ctx.fill();
+    }
+  }
+
+  function drawJunction(ey, ev) {
+    const ch = L * 2.4, x0 = -PADX, x1 = W + PADX, top = ey - ch / 2;
+    if (ev.ways >= 5) { // a fifth road leaving at an angle
+      ctx.save(); ctx.translate(roadX + roadW, ey); ctx.rotate(-0.72);
+      asphaltBand(0, -ch * 0.4, H * 1.3, ch * 0.8);
+      ctx.fillStyle = 'rgba(255,210,31,0.6)'; for (let d = L * 2; d < H * 1.3; d += L * 1.1) ctx.fillRect(d, -1.5, L * 0.55, 3);
+      ctx.restore();
+    }
+    asphaltBand(x0, top, x1 - x0, ch);
+    // footpath corners along the side road
+    ctx.fillStyle = '#766d66';
+    const fpw = Math.max(FP, 8);
+    for (const [xa, xb] of [[x0, roadX], [roadX + roadW, x1]]) { ctx.fillRect(xa, top - fpw, xb - xa, fpw); ctx.fillRect(xa, top + ch, xb - xa, fpw); }
+    // side-road centre line
+    ctx.fillStyle = 'rgba(255,210,31,0.75)';
+    for (let x = x0; x < roadX - L; x += L * 1.1) ctx.fillRect(x, ey - 1.5, L * 0.55, 3);
+    for (let x = roadX + roadW + L; x < x1; x += L * 1.1) ctx.fillRect(x, ey - 1.5, L * 0.55, 3);
+    // zebras on every arm
+    zebraAcross(top - L * 0.55, L * 0.8);
+    zebraAcross(top + ch + L * 0.55, L * 0.8);
+    zebraAlong(roadX - L * 0.6, top, ch);
+    zebraAlong(roadX + roadW + L * 0.6, top, ch);
+    // signals and the traffic police box
+    signalPole(roadX - FP * 0.5, top - fpw * 0.5);
+    signalPole(roadX + roadW + FP * 0.5, top + ch + fpw * 0.5);
+    policeBox(roadX - Math.max(FP, 10) * 0.6, top + ch + fpw + L * 0.3);
+  }
+
+  function drawRoundabout(ey, ev) {
+    const R = roadW * 0.8, ri = L * 0.95, ch = L * 2.2, cx = W / 2;
+    asphaltBand(-PADX, ey - ch / 2, W + PADX * 2, ch);
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, ey, R, 0, Math.PI * 2); ctx.clip();
+    asphaltBand(cx - R, ey - R, R * 2, R * 2); ctx.restore();
+    // lane ring
+    ctx.strokeStyle = 'rgba(245,240,225,0.55)'; ctx.lineWidth = 2; ctx.setLineDash([L * 0.4, L * 0.4]);
+    ctx.beginPath(); ctx.arc(cx, ey, (R + ri) / 2 + L * 0.15, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    zebraAcross(ey - R - L * 0.5, L * 0.7);
+    zebraAcross(ey + R + L * 0.5, L * 0.7);
+    // island: painted kerb ring, grass, monument
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; dot(ctx, cx + 5, ey + 7, ri + 3);
+    const segs = 16;
+    for (let i = 0; i < segs; i++) {
+      ctx.fillStyle = i % 2 ? '#ffd21f' : '#1c1c1f';
+      ctx.beginPath(); ctx.moveTo(cx, ey); ctx.arc(cx, ey, ri, (i / segs) * Math.PI * 2, ((i + 1) / segs) * Math.PI * 2); ctx.closePath(); ctx.fill();
+    }
+    const g = ctx.createRadialGradient(cx - ri * 0.3, ey - ri * 0.3, ri * 0.1, cx, ey, ri);
+    g.addColorStop(0, '#5f9a4c'); g.addColorStop(1, '#2f5c2a');
+    ctx.fillStyle = g; dot(ctx, cx, ey, ri * 0.9);
+    const m = ev.monument, mr = ri * 0.55;
+    if (m === 'shapla') { // Shapla Chattar's water-lily sculpture
+      ctx.fillStyle = '#2f6f9c'; dot(ctx, cx, ey, mr * 1.05);
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        ctx.save(); ctx.translate(cx + Math.cos(a) * mr * 0.5, ey + Math.sin(a) * mr * 0.5); ctx.rotate(a);
+        ctx.fillStyle = i % 2 ? '#f4f1ea' : '#e6dfd2'; ctx.beginPath(); ctx.ellipse(0, 0, mr * 0.55, mr * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle = '#f0c34a'; dot(ctx, cx, ey, mr * 0.25);
+    } else if (m === 'obelisk') { // memorial in Bahadur Shah Park
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath(); ctx.moveTo(cx - mr * 0.18, ey); ctx.lineTo(cx + mr * 1.3, ey + mr * 1.1); ctx.lineTo(cx + mr * 1.5, ey + mr * 0.9); ctx.lineTo(cx + mr * 0.18, ey - mr * 0.1); ctx.fill();
+      ctx.fillStyle = '#d9d4c7'; ctx.fillRect(cx - mr * 0.3, ey - mr * 0.3, mr * 0.6, mr * 0.6);
+      ctx.fillStyle = '#f2eee4'; ctx.fillRect(cx - mr * 0.15, ey - mr * 0.15, mr * 0.3, mr * 0.3);
+    } else if (m === 'garden') {
+      for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; ctx.fillStyle = i % 3 ? '#c94f6d' : '#f0c34a'; dot(ctx, cx + Math.cos(a) * mr * 0.8, ey + Math.sin(a) * mr * 0.8, mr * 0.12); }
+      ctx.fillStyle = '#3f7d36'; dot(ctx, cx, ey, mr * 0.5);
+    } else { // fountain
+      ctx.fillStyle = '#dcd6ca'; dot(ctx, cx, ey, mr * 1.05);
+      ctx.fillStyle = '#3d86b8'; dot(ctx, cx, ey, mr * 0.9);
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 + S.t * 1.5; dot(ctx, cx + Math.cos(a) * mr * 0.45, ey + Math.sin(a) * mr * 0.45, 1.6); }
+      dot(ctx, cx, ey, mr * 0.18);
+    }
+  }
+
+  // Bus stop on the left footpath (Bangladesh drives on the left) with people waiting.
+  function drawBusStop(ey, ev) {
+    const sw = Math.max(FP, 10) + L * 0.4, sx = roadX - Math.max(FP, 10) - L * 0.4;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(sx + 4, ey - L * 0.6 + 6, sw, L * 1.2);
+    ctx.fillStyle = '#2f6b4f'; ctx.fillRect(sx, ey - L * 0.6, sw, L * 1.2);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(sx, ey - L * 0.6, sw, 3);
+    ctx.strokeStyle = 'rgba(255,210,31,0.75)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+    ctx.strokeRect(roadX + 4, ey - L * 1.1, L - 8, L * 2.2); ctx.setLineDash([]); // bus bay in the left lane
+    ctx.save(); ctx.translate(straightLane(0), ey); ctx.scale(1, 1.8);
+    ctx.font = `800 ${Math.round(L * 0.17)}px 'Baloo Da 2', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,210,31,0.6)'; ctx.fillText('বাস স্টপ', 0, 0, L * 0.8); ctx.restore();
+  }
+
+  function drawFinishLine(ey) {
+    const n = 16, cw = roadW / n, rows = 2;
+    for (let r = 0; r < rows; r++) for (let i = 0; i < n; i++) {
+      ctx.fillStyle = (i + r) % 2 ? '#f4f1ea' : '#1c1c1f';
+      ctx.fillRect(roadX + i * cw, ey - cw * rows / 2 + r * cw, cw, cw);
+    }
+  }
+
+  function renderEventsGround() {
+    const r = activeRoute();
+    if (r.endless || S.mode === 'start') return;
+    for (const ev of r.events) {
+      const ey = eventY(ev);
+      if (ey < -L * 8 || ey > H + L * 8) continue;
+      if (ev.kind === 'junction') drawJunction(ey, ev);
+      else if (ev.kind === 'roundabout') drawRoundabout(ey, ev);
+      else if (ev.kind === 'stop' || ev.kind === 'start') drawBusStop(ey, ev);
+      else if (ev.kind === 'finish') drawFinishLine(ey);
+    }
+  }
+
+  /* ---- overhead: green gantry signs, destination arch, metro viaduct, plane ---- */
+  function gantry(y, bn, en, icon, colors) {
+    const bw = Math.min(roadW * 0.94, 330), bh = Math.max(30, L * 0.7), bx = W / 2 - bw / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(bx + 8, y + bh + L * 0.4, bw, bh * 0.5); // shadow on the road
+    ctx.fillStyle = '#3a3c42'; ctx.fillRect(roadX - 6, y + bh * 0.35, roadW + 12, 4);            // cross beam
+    ctx.fillRect(roadX - 8, y + bh * 0.2, 6, bh * 0.5); ctx.fillRect(roadX + roadW + 2, y + bh * 0.2, 6, bh * 0.5);
+    ctx.fillStyle = colors[0]; rr(ctx, bx, y, bw, bh, 4); ctx.fill();
+    ctx.strokeStyle = colors[1]; ctx.lineWidth = 2; rr(ctx, bx + 3, y + 3, bw - 6, bh - 6, 3); ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff';
+    const iconW = icon ? bh * 0.8 : 0;
+    if (icon) { ctx.font = `800 ${Math.round(bh * 0.55)}px 'Baloo Da 2', sans-serif`; ctx.fillText(icon, bx + bh * 0.5, y + bh * 0.52); }
+    ctx.font = `800 ${Math.round(bh * 0.4)}px 'Baloo Da 2', 'Hind Siliguri', sans-serif`;
+    ctx.fillText(bn, bx + bw / 2 + iconW / 2, y + bh * 0.38, bw - iconW - 16);
+    ctx.font = `600 ${Math.round(bh * 0.24)}px 'Hind Siliguri', sans-serif`;
+    ctx.fillText(en, bx + bw / 2 + iconW / 2, y + bh * 0.76, bw - iconW - 16);
+  }
+  function renderSigns() {
+    const r = activeRoute();
+    if (r.endless || S.mode === 'start') return;
+    for (const ev of r.events) {
+      if (ev.kind === 'start') continue;
+      const ey = eventY(ev);
+      if (ev.kind === 'finish') {
+        const y = ey - L * 1.4;
+        if (y > -L * 2 && y < H) gantry(y, `গন্তব্য: ${ev.bn}`, `Destination: ${ev.en}`, '🏁', ['#b3261e', '#ffd21f']);
+        continue;
+      }
+      const y = ey - (ev.kind === 'roundabout' ? roadW * 0.8 + L * 2.2 : L * 3.4);
+      if (y < -L * 2 || y > H) continue;
+      const icon = ev.kind === 'roundabout' ? '↻' : ev.kind === 'junction' ? '✛' : '';
+      gantry(y, ev.bn, ev.en, icon, ['#0b6b3a', '#f4f1ea']);
+      if (ev.plane) { // planes low over the road near the airport
+        const u = (S.t * 0.12 + 0.3) % 1.4 - 0.2, px = -PADX + u * (W + PADX * 2), py = ey - L * 1.5 - u * L * 2;
+        ctx.save(); ctx.translate(px + L * 0.8, py + L * 1.2); ctx.rotate(-0.4); ctx.fillStyle = 'rgba(0,0,0,0.22)'; planeShape(L * 2.2); ctx.restore();
+        ctx.save(); ctx.translate(px, py); ctx.rotate(-0.4); ctx.fillStyle = '#e9edf1'; planeShape(L * 2.2); ctx.restore();
+      }
+    }
+  }
+  function planeShape(s) { // top-down airliner, nose pointing right
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.5, s * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(s * 0.05, 0); ctx.lineTo(-s * 0.12, -s * 0.42); ctx.lineTo(-s * 0.2, -s * 0.42); ctx.lineTo(-s * 0.1, 0);
+    ctx.lineTo(-s * 0.2, s * 0.42); ctx.lineTo(-s * 0.12, s * 0.42); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-s * 0.38, 0); ctx.lineTo(-s * 0.46, -s * 0.15); ctx.lineTo(-s * 0.5, -s * 0.15); ctx.lineTo(-s * 0.46, 0);
+    ctx.lineTo(-s * 0.5, s * 0.15); ctx.lineTo(-s * 0.46, s * 0.15); ctx.closePath(); ctx.fill();
+  }
+  // Elevated metro line above the middle of Begum Rokeya Sarani, with a train now and then.
+  function renderMetro() {
+    if (!activeRoute().metro) return;
+    const vw = L * 0.6, x = W / 2 - vw / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x + L * 0.35, 0, vw, H);
+    const g = ctx.createLinearGradient(x, 0, x + vw, 0);
+    g.addColorStop(0, '#8c877f'); g.addColorStop(0.2, '#b9b3a8'); g.addColorStop(1, '#77726a');
+    ctx.globalAlpha = 0.9; ctx.fillStyle = g; ctx.fillRect(x, 0, vw, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    const gap = L * 3.2, off = (S.scroll * 1.12) % gap;
+    for (let y = off - gap; y < H; y += gap) ctx.fillRect(x, y, vw, 3); // joints over the pillars
+    ctx.fillStyle = '#3d3f44'; ctx.fillRect(x + vw * 0.28, 0, 2, H); ctx.fillRect(x + vw * 0.7, 0, 2, H); // rails
+    const cyc = 9, ph = (S.t % cyc) / cyc;
+    if (ph < 0.45) {
+      const ty = H + L * 6 - (ph / 0.45) * (H + L * 14), tl = L * 6;
+      ctx.fillStyle = '#eef1f3'; rr(ctx, x + vw * 0.12, ty, vw * 0.76, tl, vw * 0.3); ctx.fill();
+      ctx.fillStyle = '#c62828'; ctx.fillRect(x + vw * 0.12, ty + tl * 0.08, vw * 0.76, 2);
+      ctx.fillStyle = '#0b6b3a'; ctx.fillRect(x + vw * 0.12, ty + tl * 0.5, vw * 0.76, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Copy a straight-space layer to the screen one row-band at a time, shifted by the bend.
+  function warpBlit(src) {
+    const flat = curveTab.length && Math.abs(curveTab[0]) < 0.5 && Math.abs(curveTab[curveTab.length - 1]) < 0.5 && Math.abs(offY(H / 2)) < 0.5;
+    if (flat) { mainCtx.drawImage(src, PADX * DPR, 0, W * DPR, H * DPR, 0, 0, W, H); return; }
+    const step = 5;
+    for (let y = 0; y < H; y += step) {
+      const h = Math.min(step + 1, H - y);
+      const sx = clamp((PADX - offY(y + step / 2)) * DPR, 0, src.width - W * DPR);
+      mainCtx.drawImage(src, sx, y * DPR, W * DPR, h * DPR, 0, y, W, h);
+    }
+  }
+
+  function renderLights() {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    // player headlight beam
+    const fy = P.y - P.h / 2, reach = L * (S.turbo ? 3.2 : 2.4);
+    const g = ctx.createLinearGradient(0, fy, 0, fy - reach);
+    g.addColorStop(0, S.turbo ? 'rgba(127,215,255,0.32)' : 'rgba(255,230,160,0.26)'); g.addColorStop(1, 'rgba(255,230,160,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(P.x - P.w * 0.2, fy); ctx.lineTo(P.x - L * 0.55, fy - reach); ctx.lineTo(P.x + L * 0.55, fy - reach); ctx.lineTo(P.x + P.w * 0.2, fy); ctx.fill();
+    // tail lights of traffic ahead
+    for (const o of S.obstacles) {
+      if (o.type === 'pothole') continue;
+      const ty = o.y + o.h / 2, r = L * 0.35;
+      const tg = ctx.createRadialGradient(o.x, ty, 0, o.x, ty, r);
+      tg.addColorStop(0, 'rgba(255,50,40,0.35)'); tg.addColorStop(1, 'rgba(255,50,40,0)');
+      ctx.fillStyle = tg; dot(ctx, o.x, ty, r);
+    }
+    if (S.turbo) {
+      const ag = ctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, P.h * 0.9);
+      ag.addColorStop(0, 'rgba(127,215,255,0.28)'); ag.addColorStop(1, 'rgba(127,215,255,0)');
+      ctx.fillStyle = ag; dot(ctx, P.x, P.y, P.h * 0.9);
+    }
+    ctx.restore();
+  }
+
+  function quadPoint(x0, y0, cx, cy, x1, y1, u) {
+    const a = (1 - u) * (1 - u), b = 2 * (1 - u) * u, c = u * u;
+    return [a * x0 + b * cx + c * x1, a * y0 + b * cy + c * y1];
+  }
+
+  function renderWires() {
+    const pl = roadX - FP * 0.5, pr = roadX + roadW + FP * 0.5;
+    for (const w of S.wires) {
+      if (w.y < -120 || w.y > H + 80) continue;
+      const sway = Math.sin(S.t * 1.4 + w.seed) * 2;
+      // poles
+      ctx.fillStyle = '#2b2b30';
+      dot(ctx, pl, w.y, 4.5); dot(ctx, pr, w.y + 4, 4.5);
+      ctx.strokeStyle = '#2b2b30'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(pl - 8, w.y); ctx.lineTo(pl + 8, w.y); ctx.moveTo(pr - 8, w.y + 4); ctx.lineTo(pr + 8, w.y + 4); ctx.stroke();
+      // tangled cables
+      ctx.strokeStyle = 'rgba(8,6,14,0.82)';
+      for (const [a, b, s] of w.lines) {
+        ctx.lineWidth = 1.2 + Math.abs(a) * 0.08;
+        ctx.beginPath(); ctx.moveTo(-PADX, w.y + a); ctx.quadraticCurveTo(W / 2, w.y + w.sag + s + sway, W + PADX, w.y + b); ctx.stroke();
+      }
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(pl, w.y); ctx.quadraticCurveTo(lerp(pl, pr, w.tangle), w.y + w.sag * 2.4, pr, w.y + L * 1.2); ctx.stroke();
+
+      const x0 = -PADX, y0 = w.y, cx = W / 2, cy = w.y + w.sag + sway, x1 = W + PADX, y1 = w.y;
+      if (w.kind === 'bunting') {
+        const n = Math.floor(roadW / 14);
+        for (let i = 0; i <= n; i++) {
+          const u = (roadX + (roadW * i) / n - x0) / (x1 - x0);
+          const [px, py] = quadPoint(x0, y0, cx, cy, x1, y1, u);
+          ctx.fillStyle = FLAGS[i % FLAGS.length];
+          ctx.beginPath(); ctx.moveTo(px - 5, py); ctx.lineTo(px + 5, py); ctx.lineTo(px + sway * 0.5, py + 11); ctx.closePath(); ctx.fill();
+        }
+      } else if (w.kind === 'banner') {
+        const fs = Math.max(11, Math.round(L * 0.24));
+        ctx.font = `700 ${fs}px 'Baloo Da 2', 'Hind Siliguri', sans-serif`;
+        const tw = ctx.measureText(w.text).width, bw = tw + fs * 1.4, bh = fs * 1.55;
+        const [mx, my] = quadPoint(x0, y0, cx, cy, x1, y1, 0.5);
+        const bx = mx - bw / 2 + sway, by = my + 6;
+        ctx.strokeStyle = 'rgba(8,6,14,0.8)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(bx + 4, my - 1); ctx.lineTo(bx + 4, by); ctx.moveTo(bx + bw - 4, my - 1); ctx.lineTo(bx + bw - 4, by); ctx.stroke();
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(bx + 3, by + 4, bw, bh);
+        ctx.fillStyle = w.color; ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = w.color === '#ffd21f' ? '#e8322b' : '#ffd21f'; ctx.lineWidth = 2; ctx.strokeRect(bx + 3, by + 3, bw - 6, bh - 6);
+        ctx.fillStyle = w.color === '#ffd21f' ? '#140f1f' : '#fff4d6';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(w.text, bx + bw / 2, by + bh / 2 + 1);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // Comic speech bubbles over pedestrians who got hit or nearly hit.
+  function renderBubbles() {
+    const fs = Math.round(Math.max(13, L * 0.22));
+    ctx.font = `700 ${fs}px 'Baloo Da 2', 'Hind Siliguri', sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const o of S.obstacles) {
+      if (o.type !== 'walker' || !(o.bubbleT > 0) || !o.bubble) continue;
+      const text = o.bubble.bn;
+      const tw = Math.min(ctx.measureText(text).width, W - 24), bw = tw + fs * 1.2, bh = fs * 1.9;
+      const bx = clamp(o.x - bw / 2, 8, W - bw - 8), by = o.y - o.h - bh - 10;
+      ctx.globalAlpha = clamp(o.bubbleT / 0.4, 0, 1);
+      ctx.fillStyle = '#fff4d6'; ctx.strokeStyle = '#140f1f'; ctx.lineWidth = 2;
+      rr(ctx, bx, by, bw, bh, bh * 0.45); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(o.x - 6, by + bh - 1); ctx.lineTo(o.x + 2, by + bh + 10); ctx.lineTo(o.x + 8, by + bh - 1); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff4d6'; ctx.fillRect(o.x - 5, by + bh - 3, 12, 4);
+      ctx.fillStyle = o.hit ? '#c62828' : '#140f1f';
+      ctx.fillText(text, bx + bw / 2, by + bh / 2 + 1, tw);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawPlayer(hgt) {
+    ctx.save();
+    const bob = S.mode === 'start' ? Math.sin(S.t * 3) * 1.5 : 0;
+    ctx.translate(P.x, P.y + bob - hgt * L * 0.5);
+    ctx.scale(1 + hgt * 0.4, 1 + hgt * 0.4);
+    ctx.rotate(P.tilt + Math.atan(slopeAt(P.y)));
+    if (hgt > 0) {
+      // thruster glow under the four corners
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (const sx of [-0.42, 0.42]) for (const sy of [-0.32, 0.38]) {
+        const gx = P.w * sx, gy = P.h * sy, r = P.w * 0.32;
+        const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, r);
+        g.addColorStop(0, 'rgba(180,235,255,0.7)'); g.addColorStop(1, 'rgba(127,215,255,0)');
+        ctx.fillStyle = g; dot(ctx, gx, gy, r);
+      }
+      ctx.restore();
+      // fold-out wings
+      const span = P.w * 0.6 * clamp((hgt - 0.1) * 3, 0, 1);
+      if (span > 1) {
+        for (const s of [-1, 1]) {
+          ctx.fillStyle = '#e8322b'; ctx.strokeStyle = '#ffd21f'; ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(s * P.w * 0.45, -P.h * 0.05);
+          ctx.lineTo(s * (P.w * 0.45 + span), P.h * 0.12);
+          ctx.lineTo(s * (P.w * 0.45 + span * 0.8), P.h * 0.26);
+          ctx.lineTo(s * P.w * 0.45, P.h * 0.3);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#008a5c';
+          ctx.fillRect(s > 0 ? P.w * 0.45 + span * 0.35 : -P.w * 0.45 - span * 0.55, P.h * 0.12, span * 0.2, P.h * 0.08);
+        }
+      }
+    }
+    drawTomtom(ctx, P.w, P.h, hgt > 0);
+    ctx.restore();
+  }
+
+  function render() {
+    buildCurveTable();
+    placeEntities();
+    // ground layer, straight world space
+    ctx = gctx;
+    ctx.setTransform(DPR, 0, 0, DPR, PADX * DPR, 0);
+    ctx.fillStyle = '#1c1c1f'; ctx.fillRect(-PADX, 0, W + PADX * 2, H);
+    renderSides();
+    renderRoad();
+    renderEventsGround();
+    // overhead layer: metro, bridges, wires, signs
+    ctx = octx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, ocv.width, ocv.height);
+    ctx.setTransform(DPR, 0, 0, DPR, PADX * DPR, 0);
+    renderMetro();
+    renderBridges();
+    renderWires();
+    renderSigns();
+    // screen
+    ctx = mainCtx;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.save();
+    if (S.shake > 0) ctx.translate(rand(-S.shake, S.shake) * 0.5, rand(-S.shake, S.shake) * 0.5);
+    warpBlit(gcv);
+    renderLights();
+
+    for (const o of S.obstacles) if (o.type === 'pothole') drawObstacle(ctx, o, S.t);
+    for (const it of S.items) {
+      ctx.save(); ctx.translate(it.x, it.y + Math.sin(S.t * 4 + it.seed) * 2); drawBattery(ctx, it.w, it.h, S.t + it.seed); ctx.restore();
+    }
+    const traffic = S.obstacles.filter((o) => o.type !== 'pothole').sort((a, b) => (a.y + a.h / 2) - (b.y + b.h / 2));
+    for (const o of traffic) drawObstacle(ctx, o, S.t);
+    MP.renderGhosts();
+
+    // player (hidden after a crash, the burst takes its place)
+    const blink = S.shield > 0 && Math.floor(S.t * 10) % 2 === 0; // shield flicker
+    const showPlayer = !(S.mode === 'over' && S.reason.includes('crashed')) && !(S.respawnT > 0 && S.lifeCrash) && !blink;
+    const hgt = airHeight();
+    if (S.brake && S.mode === 'play' && showPlayer) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (const sx of [-0.33, 0.33]) {
+        const bx = P.x + P.w * sx, by = P.y + P.h * 0.58;
+        const bg = ctx.createRadialGradient(bx, by, 0, bx, by, L * 0.5);
+        bg.addColorStop(0, 'rgba(255,40,30,0.75)'); bg.addColorStop(1, 'rgba(255,40,30,0)');
+        ctx.fillStyle = bg; dot(ctx, bx, by, L * 0.5);
+      }
+      ctx.restore();
+    }
+    if (S.shield > 0 && S.mode === 'play') {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const sg = ctx.createRadialGradient(P.x, P.y, P.w * 0.3, P.x, P.y, P.h * 0.85);
+      sg.addColorStop(0, 'rgba(127,215,255,0)'); sg.addColorStop(0.8, 'rgba(127,215,255,0.22)'); sg.addColorStop(1, 'rgba(127,215,255,0)');
+      ctx.fillStyle = sg; dot(ctx, P.x, P.y, P.h * 0.85);
+      ctx.restore();
+    }
+    if (showPlayer && hgt > 0) {
+      // ground shadow drifts away and shrinks as the tomtom climbs
+      const k = 1 - hgt * 0.35;
+      ctx.fillStyle = `rgba(0,0,0,${0.4 - hgt * 0.2})`;
+      ctx.beginPath(); ctx.ellipse(P.x + hgt * L * 0.35, P.y + hgt * L * 0.25, P.w * 0.55 * k, P.h * 0.5 * k, 0, 0, Math.PI * 2); ctx.fill();
+    } else if (showPlayer) drawPlayer(0);
+
+    // particles
+    for (const p of S.particles) {
+      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+      ctx.fillStyle = p.color; ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    // turbo speed streaks
+    if (S.turbo && !reduceMotion) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < 7; i++) {
+        const y = Math.random() * H, x = W / 2 + offY(y) + (Math.random() - 0.5) * roadW;
+        ctx.moveTo(x, y); ctx.lineTo(x, y + rand(30, 70));
+      }
+      ctx.stroke();
+    }
+
+    warpBlit(ocv);
+    if (showPlayer && hgt > 0) drawPlayer(hgt); // airborne: above the wires and banners
+
+    // floating text
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `800 ${Math.round(Math.max(16, L * 0.3))}px 'Baloo Da 2', sans-serif`;
+    for (const f of S.floaters) {
+      ctx.globalAlpha = clamp(f.life, 0, 1);
+      ctx.fillStyle = '#140f1f'; ctx.fillText(f.text, f.x + 2, f.y + 2);
+      ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // dusk vignette + low-battery pulse
+    ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
+
+    // life lost: say what happened and how many lives remain
+    if (S.mode === 'play' && S.respawnT > 0) {
+      ctx.fillStyle = 'rgba(21,16,38,0.45)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const big = Math.round(Math.min(W, H) * 0.11);
+      ctx.font = `800 ${big}px 'Baloo Da 2', sans-serif`;
+      ctx.fillStyle = '#e8322b'; ctx.fillText('❤'.repeat(S.lives), W / 2 + 3, H * 0.4 + 3);
+      ctx.fillStyle = '#ffd21f'; ctx.fillText('❤'.repeat(S.lives), W / 2, H * 0.4);
+      ctx.font = `800 ${Math.round(big * 0.42)}px 'Baloo Da 2', sans-serif`;
+      ctx.fillStyle = '#fff4d6';
+      ctx.fillText(`${S.lives} ${S.lives === 1 ? 'life' : 'lives'} left · back in ${Math.ceil(S.respawnT)}`, W / 2, H * 0.4 + big * 0.85);
+      ctx.font = `600 ${Math.round(Math.max(13, big * 0.26))}px 'Hind Siliguri', sans-serif`;
+      ctx.fillStyle = 'rgba(255,244,214,0.8)';
+      ctx.fillText(S.lifeReason, W / 2, H * 0.4 + big * 1.35);
+      ctx.fillText(`Your ${Math.floor(S.dist).toLocaleString('en-US')} m are kept.`, W / 2, H * 0.4 + big * 1.75);
+    }
+    if (S.mode === 'play' && S.battery < 20) {
+      const a = (0.5 + 0.5 * Math.sin(S.t * 7)) * 0.22;
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+      g.addColorStop(0, 'rgba(232,50,43,0)'); g.addColorStop(1, `rgba(232,50,43,${a})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  /* =========================================================
+     HUD (DOM writes only when values change)
+     ========================================================= */
+  const ui = {
+    hud: document.getElementById('hudLayer'), pad: document.getElementById('pad'),
+    over: document.getElementById('overScreen'), pause: document.getElementById('pauseScreen'),
+    gate: document.getElementById('gateScreen'), lobby: document.getElementById('lobbyScreen'), room: document.getElementById('roomScreen'),
+    countdown: document.getElementById('countdown'), cdNum: document.getElementById('cdNum'), cdSub: document.getElementById('cdSub'),
+    nameInput: document.getElementById('nameInput'), nameErr: document.getElementById('nameErr'), hello: document.getElementById('hello'),
+    online: document.getElementById('onlineCount'), mpMsg: document.getElementById('mpMsg'), codeInput: document.getElementById('codeInput'),
+    lbList: document.getElementById('lbList'), lbMe: document.getElementById('lbMe'), rules: document.getElementById('rulesList'), rankSrc: document.getElementById('rankSrc'),
+    roomCode: document.getElementById('roomCode'), roomList: document.getElementById('roomList'), roomResults: document.getElementById('roomResults'),
+    roomResultsLabel: document.getElementById('roomResultsLabel'), resultsList: document.getElementById('resultsList'),
+    roomStatus: document.getElementById('roomStatus'), raceBtn: document.getElementById('raceBtn'),
+    raceBox: document.getElementById('raceBox'), raceLabel: document.getElementById('raceLabel'), raceList: document.getElementById('raceList'),
+    back: document.getElementById('backBtn'), saveNote: document.getElementById('saveNote'),
+    standings: document.getElementById('standings'), standList: document.getElementById('standList'),
+    routeChip: document.getElementById('routeChip'), routeName: document.getElementById('routeName'), nextStop: document.getElementById('nextStop'),
+    nextDist: document.getElementById('nextDist'), routeFill: document.getElementById('routeFill'), routeList: document.getElementById('routeList'),
+    roomRoutes: document.getElementById('roomRoutes'), roomRouteBox: document.getElementById('roomRouteBox'),
+    overTitle: document.getElementById('overTitle'), overBn: document.getElementById('overBn'),
+    dist: document.getElementById('dist'), bestHud: document.getElementById('bestHud'), lives: document.getElementById('lives'),
+    cells: document.getElementById('cells'), pct: document.getElementById('pct'), batChip: document.getElementById('batChip'),
+    turbo: document.getElementById('turboTag'), reason: document.getElementById('reason'), finalDist: document.getElementById('finalDist'),
+    finalBest: document.getElementById('finalBest'), newBest: document.getElementById('newBest'), tip: document.getElementById('tip'),
+    restart: document.getElementById('restartBtn'), mute: document.getElementById('muteBtn'),
+    brakeTag: document.getElementById('brakeTag'), fly: document.getElementById('flyTag'), flyBtn: document.getElementById('btnF'),
+  };
+  const cellEls = Array.from({ length: 10 }, () => { const s = document.createElement('span'); s.className = 'cell'; ui.cells.appendChild(s); return s; });
+  const cache = {};
+  function setIf(key, val, fn) { if (cache[key] !== val) { cache[key] = val; fn(val); } }
+
+  function updateHUD() {
+    setIf('dist', Math.floor(S.dist), (v) => (ui.dist.textContent = v.toLocaleString('en-US')));
+    setIf('best', S.best, (v) => { ui.bestHud.textContent = v.toLocaleString('en-US'); });
+    setIf('lives', S.lives, (v) => {
+      ui.lives.replaceChildren(...Array.from({ length: CFG.lives }, (_, i) => el('span', i < v ? '' : 'gone', '❤')));
+      ui.lives.setAttribute('aria-label', `${v} ${v === 1 ? 'life' : 'lives'} left`);
+    });
+    const pct = Math.ceil(S.battery);
+    setIf('pct', pct, (v) => {
+      ui.pct.textContent = v + '%';
+      const n = Math.ceil(v / 10);
+      cellEls.forEach((el, i) => el.classList.toggle('on', i < n));
+      ui.batChip.classList.toggle('low', v <= 25);
+    });
+    setIf('turbo', S.turbo, (v) => ui.turbo.classList.toggle('on', v));
+    setIf('brake', !!S.brake && S.mode === 'play', (v) => { ui.brakeTag.hidden = !v; ui.turbo.hidden = v; });
+    const r = activeRoute(), showRoute = S.mode !== 'start' && !r.endless;
+    setIf('rchip', showRoute ? r.id : '', (v) => { ui.routeChip.hidden = !v; if (v) ui.routeName.textContent = `${r.bn} · ${r.to}`; });
+    if (showRoute) {
+      const next = r.events.find((e) => e.kind !== 'start' && e.at > S.track) || r.events[r.events.length - 1];
+      setIf('rnext', next.bn, (v) => { ui.nextStop.textContent = v; });
+      setIf('rdist', Math.max(0, Math.round((next.at - S.track) / 10) * 10), (v) => { ui.nextDist.textContent = v + ' m'; });
+      setIf('rfill', Math.round(clamp(S.track / r.length, 0, 1) * 100), (v) => { ui.routeFill.style.width = v + '%'; });
+    }
+    const flyState = P.air > 0 ? 'air' : P.cool > 0 ? 'cool:' + Math.ceil(P.cool) : S.battery <= CFG.flyCost + 1 ? 'low' : 'ready';
+    setIf('fly', flyState, (v) => {
+      ui.fly.textContent = v === 'air' ? 'FLYING' : v === 'ready' ? 'FLY READY' : v === 'low' ? 'FLY: LOW BATT' : `FLY ${v.split(':')[1]}s`;
+      ui.fly.classList.toggle('fly-ready', v === 'ready');
+      ui.fly.classList.toggle('fly-air', v === 'air');
+      ui.flyBtn.classList.toggle('cooling', v !== 'ready' && v !== 'air');
+    });
+  }
+
+  /* =========================================================
+     INPUT
+     ========================================================= */
+  window.addEventListener('keydown', (e) => {
+    if (e.target && e.target.tagName === 'INPUT') return; // typing a name or room code
+    const k = e.key.toLowerCase();
+    if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', ' '].includes(k)) e.preventDefault();
+    if (k === 'm' && !e.repeat) toggleMute();
+    if (S.mode === 'play') {
+      if (!e.repeat && k === 'h') honk();
+      if (!e.repeat && (k === ' ' || k === 'f')) fly();
+      if (!e.repeat && (k === 'arrowleft' || k === 'a')) steer(-1);
+      if (!e.repeat && (k === 'arrowright' || k === 'd')) steer(1);
+      if (k === 'arrowup' || k === 'w') input.turboKey = true;
+      if (k === 'arrowdown' || k === 's') input.brakeKey = true;
+      if (k === 'p' || k === 'escape') togglePause();
+    } else if (S.mode === 'paused') {
+      if (['p', 'escape', ' ', 'enter'].includes(k)) togglePause();
+    } else if ((k === ' ' || k === 'enter') && !e.repeat && !ui.over.hidden && !S.raceId) {
+      e.preventDefault(); startGame();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'arrowup' || k === 'w') input.turboKey = false;
+    if (k === 'arrowdown' || k === 's') input.brakeKey = false;
+  });
+
+  function bindTap(el, fn) {
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); el.classList.add('active'); fn();
+      try { if (navigator.vibrate) navigator.vibrate(8); } catch (_) {}
+    });
+    const off = () => el.classList.remove('active');
+    el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off); el.addEventListener('pointerleave', off);
+  }
+  bindTap(document.getElementById('btnL'), () => steer(-1));
+  bindTap(document.getElementById('btnR'), () => steer(1));
+  bindTap(document.getElementById('btnH'), honk);
+  bindTap(document.getElementById('btnF'), fly);
+  ui.mute.addEventListener('click', toggleMute);
+  ui.mute.textContent = Sound.isMuted() ? '🔇 Sound off' : '🔊 Sound on';
+  ui.mute.setAttribute('aria-pressed', String(Sound.isMuted()));
+  const btnT = document.getElementById('btnT');
+  btnT.addEventListener('pointerdown', (e) => { e.preventDefault(); try { btnT.setPointerCapture(e.pointerId); } catch (_) {} input.turboTouch = true; btnT.classList.add('active'); });
+  const turboOff = () => { input.turboTouch = false; btnT.classList.remove('active'); };
+  const btnB = document.getElementById('btnB');
+  btnB.addEventListener('pointerdown', (e) => { e.preventDefault(); try { btnB.setPointerCapture(e.pointerId); } catch (_) {} input.brakeTouch = true; btnB.classList.add('active'); });
+  const brakeOff = () => { input.brakeTouch = false; btnB.classList.remove('active'); };
+  btnB.addEventListener('pointerup', brakeOff); btnB.addEventListener('pointercancel', brakeOff); btnB.addEventListener('lostpointercapture', brakeOff);
+  btnT.addEventListener('pointerup', turboOff); btnT.addEventListener('pointercancel', turboOff); btnT.addEventListener('lostpointercapture', turboOff);
+
+  // Swipe on the road as a backup steering method on touch screens
+  let swipeX = null;
+  cv.addEventListener('pointerdown', (e) => { swipeX = e.clientX; });
+  cv.addEventListener('pointerup', (e) => {
+    if (swipeX === null) return;
+    const dx = e.clientX - swipeX; swipeX = null;
+    if (Math.abs(dx) > 30) steer(Math.sign(dx));
+  });
+
+  document.getElementById('soloBtn').addEventListener('click', () => startGame());
+  ui.restart.addEventListener('click', () => startGame());
+  ui.back.addEventListener('click', backFromOver);
+  document.getElementById('resumeBtn').addEventListener('click', togglePause);
+  document.addEventListener('visibilitychange', () => { if (document.hidden && S.mode === 'play' && !S.raceId) togglePause(); });
+  window.addEventListener('blur', () => { if (S.mode === 'play' && !S.raceId) togglePause(); });
+
+  /* =========================================================
+     LEGEND ICONS on the start screen (reuse the game's drawings)
+     ========================================================= */
+  function drawLegend() {
+    document.querySelectorAll('#legend canvas').forEach((c) => {
+      const d = Math.min(2, window.devicePixelRatio || 1);
+      c.width = 48 * d; c.height = 64 * d;
+      const g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, 48, 64);
+      g.translate(24, 32);
+      const kind = c.dataset.kind;
+      if (kind === 'cycle') drawCycle(g, 22, 44, { color: '#e8322b', shirt: '#f5f5f5' });
+      if (kind === 'cng') drawCNG(g, 24, 44, null, 0);
+      if (kind === 'bus') drawBus(g, 18, 48, { color: '#00897b', stripe: '#ffd21f', line: BUS_LINES[2], dents: [[0.3, 0.4, 1], [0.7, 0.7, 3]] });
+      if (kind === 'pothole') drawPothole(g, 34, 22, { pts: [1, 0.85, 0.95, 0.8, 1, 0.9, 0.78, 0.98, 0.88, 0.94, 0.82] });
+      if (kind === 'battery') drawBattery(g, 20, 28, 0.3);
+      if (kind === 'walker') { g.rotate(-Math.PI / 2); drawWalker(g, 34, { dir: 1, phase: 1.2, cloth: '#e53935', orna: '#fdd835' }); }
+    });
+  }
+
+  /* =========================================================
+     SMALL DOM HELPERS (all player text goes in via textContent)
+     ========================================================= */
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function cleanName(s) { return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 16) || 'Driver'; }
+  function rowEl(rank, name, dist, me, tag) {
+    const li = el('li', me ? 'me' : '');
+    const nm = el('span', 'nm', name);
+    if (me) nm.append(el('small', '', 'you'));
+    if (tag) nm.append(el('small', '', tag));
+    li.append(el('span', 'rk', String(rank)), nm, el('span', 'ds', Math.floor(dist).toLocaleString('en-US') + ' m'));
+    return li;
+  }
+  const GHOST_COLORS = ['#7fd7ff', '#ff8fab', '#b388ff', '#69f0ae', '#ffab40', '#80cbc4', '#f48fb1', '#e6ee9c'];
+
+  /* =========================================================
+     ENTRANCE: username gate
+     ========================================================= */
+  const NAME_RE = /^[\p{L}\p{M}\p{N}_ -]+$/u;
+  function validName(raw) {
+    const n = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (n.length < 2) return [null, 'Use at least 2 characters.'];
+    if (n.length > 16) return [null, 'Keep it to 16 characters or fewer.'];
+    if (!NAME_RE.test(n)) return [null, 'Use letters, numbers, spaces, _ or - only.'];
+    return [n, null];
+  }
+  function renderRoutePicker() {
+    for (const list of [ui.routeList, ui.roomRoutes]) list.replaceChildren(...routeCards());
+  }
+  function routeCards() {
+    return ROUTES.map((r) => {
+      const on = r.id === S.routeId;
+      const b = el('button', 'route' + (on ? ' on' : ''));
+      b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(on));
+      const head = el('div', 'rhead');
+      head.append(el('span', 'rbn', `${r.bn}`), el('span', 'rlen', r.endless ? '∞' : `${(r.length / 1000).toFixed(1)} km`));
+      b.append(head, el('div', 'rsub', r.endless ? r.blurb : `${r.from} → ${r.to}`));
+      if (!r.endless) {
+        b.append(el('div', 'rstops', r.events.map((e) => e.en).join(' · ')));
+        const j = r.events.filter((e) => e.kind === 'junction').length, rb = r.events.filter((e) => e.kind === 'roundabout').length;
+        b.append(el('div', 'rtags', `${j} junction${j === 1 ? '' : 's'}${rb ? ` · ${rb} roundabout${rb === 1 ? '' : 's'}` : ''}`));
+      }
+      b.title = r.blurb;
+      b.addEventListener('click', () => {
+        S.routeId = r.id; store.set('drr-route', r.id);
+        renderRoutePicker(); MP.sendIdle(); if (!ui.room.hidden) MP.renderRoom();
+      });
+      return b;
+    });
+  }
+
+  function showLobby() {
+    S.mode = 'start'; S.routeRun = 'endless';
+    renderRoutePicker();
+    ui.hello.textContent = S.name;
+    showScreen('lobby');
+    MP.lobbyPresence('lobby');
+    LB.render();
+  }
+
+  /* =========================================================
+     GLOBAL LEADERBOARD   db: scores/<player id> = {name, best, at, mode}
+     ========================================================= */
+  // Shown verbatim under "How ranking works", so everyone can see exactly how the board is ordered.
+  function rankEntries(entries) {
+    return entries
+      // only finished runs with a real distance (and a sanity ceiling)
+      .filter((e) => Number.isFinite(e.best) && e.best > 0 && e.best <= 200000)
+      // farthest single run first; a tie goes to whoever got there first
+      .sort((a, b) => b.best - a.best || a.at - b.at)
+      .map((e, i) => ({ ...e, rank: i + 1 }));
+  }
+
+  function renderRules() {
+    const m = CFG.metersPerScreen;
+    const items = [
+      'Your score is your single farthest run, in meters. One row per driver; only a new personal best replaces it.',
+      `Distance is road covered: ${m} m per screen of road. Speed starts at ${(CFG.vBase * m).toFixed(1)} m/s and ramps to ${(CFG.vMax * m).toFixed(1)} m/s by ${CFG.rampMeters.toLocaleString('en-US')} m. Turbo multiplies it by ${CFG.turboMult}.`,
+      `Battery drains ${CFG.drain}%/s (${CFG.drainTurbo}%/s on Turbo). Packs add ${CFG.pack}%, potholes take ${CFG.potholeCost}%, each Roadster Hop costs ${CFG.flyCost}%.`,
+      `Each run has ${CFG.lives} lives. A crash or a flat battery costs one; you respawn where you were with your distance kept, at least ${CFG.respawnBattery}% battery and ${CFG.shield} s of shield. The run ends when the last life is gone.`,
+      `Hitting a pedestrian doesn't cost a life, but takes ${CFG.walkerPenalty} m off your distance.`,
+      'Pick a route in the lobby. Endless never ends; the real Dhaka routes end at their destination, and the distance you drove still counts.',
+      'Solo runs and room races both count. A run is posted the moment it ends.',
+      'Ties go to whoever reached that distance first.',
+      'Scores are reported by each player\'s own browser. There is no server-side replay check.',
+    ];
+    ui.rules.replaceChildren(...items.map((t) => el('li', '', t)));
+    ui.rankSrc.textContent = rankEntries.toString();
+  }
+
+  const LB = {
+    db: null, uid: null, rows: [], mine: null, ready: false, renamedTo: null,
+    init(db, uid) {
+      this.db = db; this.uid = uid;
+      if (!db) { this.empty('The global leaderboard needs a signed-in viewer. Solo runs still save your best on this device.'); return; }
+      this.empty('Loading drivers…');
+      db.collection('scores').orderBy('best', 'desc').limit(50).onSnapshot(
+        (snap) => { this.rows = snap.docs.map((d) => ({ id: d.id, ...d.data() })); this.ready = true; this.render(); },
+        () => this.empty('The leaderboard is unavailable right now.'));
+      if (uid) {
+        db.doc('scores/' + uid).onSnapshot((s) => {
+          this.mine = s.exists ? s.data() : null;
+          if (this.mine && +this.mine.best > S.best) { S.best = Math.floor(+this.mine.best); store.set('drr-best', String(S.best)); }
+          this.syncName();
+          this.render();
+        }, () => {});
+      }
+    },
+    // Keep the board showing the name the player entered most recently.
+    syncName() {
+      if (!this.db || !this.uid || !this.mine || !S.name || this.mine.name === S.name || this.renamedTo === S.name) return;
+      this.renamedTo = S.name;
+      this.db.doc('scores/' + this.uid).update({ name: S.name }).catch(() => {});
+    },
+    async submit(d, mode) {
+      ui.saveNote.textContent = '';
+      if (d <= 0) return;
+      if (!this.db || !this.uid) { ui.saveNote.textContent = 'Saved on this device only. Sign in to post to the global board.'; return; }
+      const prev = this.mine ? Math.floor(+this.mine.best || 0) : 0;
+      if (d <= prev) { ui.saveNote.textContent = `Your board score stays at ${prev.toLocaleString('en-US')} m.`; return; }
+      try {
+        await this.db.doc('scores/' + this.uid).set({ name: S.name, best: d, at: Date.now(), mode });
+        ui.saveNote.textContent = 'New best posted to the global leaderboard.';
+      } catch (e) {
+        ui.saveNote.textContent = e && e.code === 'invalid_argument'
+          ? 'Your access level can\'t post scores. Ask the owner for Contributor access.'
+          : 'Couldn\'t post your score right now.';
+      }
+    },
+    empty(msg) { ui.lbList.replaceChildren(el('li', 'empty', msg)); ui.lbMe.textContent = ''; },
+    render() {
+      if (!this.ready) return;
+      const ranked = rankEntries(this.rows.map((r) => ({
+        id: r.id, name: cleanName(r.name), best: Math.floor(+r.best || 0), at: +r.at || 0, mode: r.mode === 'race' ? 'race' : 'solo',
+      })));
+      if (!ranked.length) { this.empty('No scores yet. Finish a run to take #1.'); return; }
+      ui.lbList.replaceChildren(...ranked.slice(0, 10).map((e) => rowEl(e.rank, e.name, e.best, e.id === this.uid, e.mode === 'race' ? 'race' : '')));
+      const me = ranked.find((e) => e.id === this.uid);
+      ui.lbMe.textContent = me
+        ? (me.rank > 10 ? `You're #${me.rank} with ${me.best.toLocaleString('en-US')} m.` : '')
+        : (this.uid ? 'Finish a run to get on the board.' : '');
+    },
+  };
+
+  /* =========================================================
+     MULTIPLAYER ROOMS
+     Lobby room = everyone with the game open (online count).
+     Named room "drr-<code>" = one race group. Presence carries each
+     driver's name, status, distance and lane; the host (lowest peer
+     label) starts a race by putting {race:{id, lead}} in its presence.
+     Traffic is local to each player; ghosts show rivals' lanes and gaps.
+     ========================================================= */
+  const MP = {
+    room: null, nr: null, code: '', peers: [], ghosts: new Map(), departed: new Map(), unsubs: [],
+    lastRace: null, seenRace: null, joinedAt: 0, lastSent: 0, lastStand: 0,
+
+    init(room) {
+      this.room = room;
+      if (!room) {
+        ui.mpMsg.textContent = 'Rooms need a signed-in viewer. Solo runs work for everyone.';
+        document.getElementById('createBtn').disabled = true; document.getElementById('joinBtn').disabled = true;
+        return;
+      }
+      room.onPeers((ch) => {
+        const n = ch.peers.filter((p) => p.kind === 'viewer' && p.presence && p.presence.name).length;
+        ui.online.hidden = n < 1;
+        ui.online.textContent = `${n} driver${n === 1 ? '' : 's'} online`;
+      }, () => { ui.online.hidden = true; });
+      this.lobbyPresence(S.name ? 'lobby' : 'gate');
+    },
+    lobbyPresence(where) { if (this.room && S.name) this.room.presence({ name: S.name, where }).catch(() => {}); },
+    newCode() { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 5; i++) s += a[(Math.random() * a.length) | 0]; return s; },
+
+    async join(raw) {
+      const code = String(raw || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+      if (code.length < 3) { ui.mpMsg.textContent = 'Enter the room code your friend shared.'; return; }
+      if (!this.room) return;
+      Sound.init(); // unlock audio on this click so the race countdown can beep
+      ui.mpMsg.textContent = 'Joining room…';
+      try {
+        if (this.nr) await this.leave(true);
+        const nr = await this.room.join('drr-' + code);
+        this.nr = nr; this.code = code; this.peers = nr.peers();
+        this.departed.clear(); this.ghosts.clear(); this.lastRace = null; this.seenRace = null; this.joinedAt = Date.now();
+        this.unsubs.push(nr.onPeers((ch) => this.onPeers(ch), () => {
+          this.nr = null; ui.mpMsg.textContent = 'Lost the room connection.'; if (S.mode !== 'play') showLobby();
+        }));
+        this.sendIdle();
+        this.lobbyPresence('room');
+        ui.mpMsg.textContent = '';
+        this.showRoom();
+      } catch (e) {
+        ui.mpMsg.textContent = e && e.code === 'not_permitted' ? 'Rooms aren\'t available for your account here.'
+          : e && e.code === 'limit_reached' ? 'Too many rooms open right now. Try again shortly.' : 'Couldn\'t join that room. Try again.';
+      }
+    },
+    async leave(silent) {
+      for (const u of this.unsubs) u();
+      this.unsubs = [];
+      const nr = this.nr;
+      this.nr = null; this.peers = []; this.ghosts.clear();
+      if (nr) await nr.leave().catch(() => {});
+      this.lobbyPresence('lobby');
+      if (!silent) showLobby();
+    },
+    showRoom() { S.mode = 'start'; S.routeRun = 'endless'; showScreen('room'); renderRoutePicker(); this.renderRoom(); },
+
+    viewers() {
+      return this.peers.filter((p) => p.kind === 'viewer' && p.presence && p.presence.name)
+        .slice().sort((a, b) => (a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0));
+    },
+    host() { return this.viewers()[0] || null; },
+    amHost() { const h = this.host(); return !!h && h.sameTab; },
+    colorFor(peer) { const i = this.viewers().findIndex((p) => p.peer === peer); return GHOST_COLORS[(i < 0 ? 0 : i) % GHOST_COLORS.length]; },
+    activeRace() {
+      for (const p of this.viewers()) { const pr = p.presence; if ((pr.st === 'racing' || pr.st === 'ready') && typeof pr.rid === 'string') return pr.rid; }
+      return null;
+    },
+
+    onPeers(ch) {
+      this.peers = ch.peers;
+      for (const p of ch.left) {
+        const pr = p.presence || {};
+        if (typeof pr.rid === 'string') this.departed.set(p.peer, { name: cleanName(pr.name), d: +pr.d || 0, rid: pr.rid });
+        this.ghosts.delete(p.peer);
+      }
+      this.checkRaceStart();
+      if (!ui.room.hidden) this.renderRoom();
+      if (!ui.over.hidden && S.raceId) this.renderRaceBox();
+    },
+
+    // ---- presence we publish ------------------------------------------
+    sendIdle() {
+      if (!this.nr) return;
+      this.nr.presence({ name: S.name, st: 'lobby', race: null, route: S.routeId, rid: this.lastRace, d: this.lastRace ? Math.floor(S.lastRaceDist || 0) : 0, lane: 1, air: 0 }).catch(() => {});
+    },
+    sendRace(force) {
+      const rid = S.raceId || S.cdRace;
+      if (!this.nr || !rid) return;
+      const now = performance.now();
+      if (!force && now - this.lastSent < 100) return;
+      this.lastSent = now;
+      const st = S.mode === 'play' ? 'racing' : S.mode === 'countdown' ? 'ready' : 'out';
+      this.nr.presence({ name: S.name, st, rid, d: Math.floor(S.dist), lane: P.lane, air: P.air > 0 ? 1 : 0, ft: S.finished ? Math.round(S.finishTime * 10) / 10 : null }).catch(() => {});
+    },
+
+    // ---- race start ---------------------------------------------------
+    startRace() {
+      if (!this.nr || !this.amHost() || this.activeRace()) return;
+      const id = 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+      this.seenRace = id;
+      this.nr.presence({ race: { id, lead: 3500, route: S.routeId } }).catch(() => {});
+      this.beginCountdown(id, Date.now() + 3500, S.routeId);
+    },
+    checkRaceStart() {
+      const h = this.host();
+      if (!h || h.sameTab) return;
+      const r = h.presence && h.presence.race;
+      if (!r || typeof r.id !== 'string' || r.id === this.seenRace) return;
+      this.seenRace = r.id;
+      if (h.updatedAt < this.joinedAt + 800) return; // that race was already under way when we arrived
+      if (S.mode === 'play' || S.mode === 'countdown') return;
+      const lead = clamp(+r.lead || 3500, 1000, 6000);
+      this.beginCountdown(r.id, h.updatedAt + lead, typeof r.route === 'string' ? r.route : 'endless');
+    },
+    beginCountdown(id, at, route) {
+      S.cdRace = id; S.cdAt = at; S.mode = 'countdown';
+      S.raceRoute = route; S.routeRun = routeForRun(route); S.track = 0; S.evDone = new Set();
+      S.obstacles = []; S.items = []; S.particles = []; S.floaters = []; S.dist = 0; S.raceId = null;
+      P.lane = 1; P.lx = 1; P.air = 0; P.cool = 0;
+      showScreen(null); ui.hud.hidden = true; ui.pad.hidden = true; ui.countdown.hidden = false;
+      const n = this.viewers().length;
+      ui.cdSub.textContent = `${n} driver${n === 1 ? '' : 's'} on the grid · ${activeRoute().en}`;
+      cache.cd = undefined;
+      this.sendRace(true);
+      this.lobbyPresence('racing');
+    },
+
+    // ---- standings ----------------------------------------------------
+    raceRows(rid) {
+      if (!rid) return [];
+      const rows = [], seen = new Set();
+      for (const p of this.peers) {
+        const pr = p.presence || {};
+        if (pr.rid !== rid) continue;
+        seen.add(p.peer);
+        let d = +pr.d || 0, st = pr.st;
+        if (p.sameTab && S.raceId === rid) { d = Math.floor(S.dist); st = S.mode === 'play' ? 'racing' : 'out'; }
+        let ft = typeof pr.ft === 'number' ? pr.ft : null;
+        if (p.sameTab && S.raceId === rid) ft = S.finished ? S.finishTime : null;
+        rows.push({ peer: p.peer, me: p.sameTab, name: cleanName(pr.name), d, ft, st: st === 'racing' || st === 'ready' ? 'racing' : 'out' });
+      }
+      if (S.raceId === rid && !rows.some((r) => r.me)) rows.push({ peer: 'me', me: true, name: S.name, d: Math.floor(S.dist), ft: S.finished ? S.finishTime : null, st: S.mode === 'play' ? 'racing' : 'out' });
+      for (const [peer, r] of this.departed) if (r.rid === rid && !seen.has(peer)) rows.push({ peer, me: false, name: r.name, d: r.d, st: 'left' });
+      // finishers first (fastest time), then everyone else by distance
+      return rows.sort((a, b) => ((b.ft != null) - (a.ft != null)) || (a.ft != null ? a.ft - b.ft : b.d - a.d));
+    },
+    tagFor(r) { return r.ft != null ? `🏁 ${fmtTime(r.ft)}` : r.st === 'racing' ? 'driving' : r.st === 'left' ? 'left' : ''; },
+    renderStandings() {
+      const rows = this.raceRows(S.raceId);
+      let shown = rows.slice(0, 4);
+      const meIdx = rows.findIndex((r) => r.me);
+      if (meIdx > 3) shown = rows.slice(0, 3).concat(rows[meIdx]);
+      ui.standList.replaceChildren(...shown.map((r) => {
+        const li = el('li', (r.me ? 'me ' : '') + (r.st !== 'racing' ? 'out' : ''));
+        li.append(el('span', 'nm', `${rows.indexOf(r) + 1}. ${r.name}`), el('span', '', `${r.d.toLocaleString('en-US')} m`));
+        return li;
+      }));
+    },
+    renderRaceBox() {
+      const rows = this.raceRows(S.raceId);
+      const done = rows.every((r) => r.st !== 'racing');
+      ui.raceLabel.textContent = done ? 'Final results' : 'Race standings · others still driving';
+      ui.raceList.replaceChildren(...rows.map((r, i) => rowEl(done && i === 0 ? '🏆' : i + 1, r.name, r.d, r.me, this.tagFor(r))));
+    },
+    renderRoom() {
+      if (!this.nr) return;
+      ui.roomCode.textContent = this.code.toUpperCase();
+      const vs = this.viewers(), h = vs[0];
+      ui.roomList.replaceChildren(...(vs.length ? vs.map((p) => {
+        const pr = p.presence;
+        const li = el('li');
+        const dot = el('span', 'dotc'); dot.style.background = this.colorFor(p.peer);
+        li.append(dot, el('span', 'nm', cleanName(pr.name)));
+        if (p === h) li.append(el('span', 'pill host', 'Host'));
+        if (p.sameTab) li.append(el('span', 'pill you', 'You'));
+        if (pr.st === 'racing' || pr.st === 'ready') li.append(el('span', 'pill racing', 'Racing'));
+        return li;
+      }) : [el('li', '', 'Connecting…')]));
+
+      const active = this.activeRace();
+      const rid = active || this.lastRace;
+      const rows = this.raceRows(rid);
+      ui.roomResults.hidden = !rows.length;
+      if (rows.length) {
+        ui.roomResultsLabel.textContent = active ? 'Race in progress' : 'Last race results';
+        ui.resultsList.replaceChildren(...rows.map((r, i) => rowEl(!active && i === 0 ? '🏆' : i + 1, r.name, r.d, r.me, this.tagFor(r))));
+      }
+      const host = this.amHost();
+      const hostRoute = ROUTE_BY_ID[host ? S.routeId : h && h.presence.route] || ROUTE_BY_ID.endless;
+      ui.raceBtn.hidden = !host || !!active;
+      ui.roomRouteBox.hidden = !host || !!active;
+      ui.raceBtn.textContent = `Start race · ${hostRoute.en}`;
+      ui.roomStatus.textContent = active
+        ? 'A race is running. You\'ll be on the grid for the next one.'
+        : host ? `${vs.length} driver${vs.length === 1 ? '' : 's'} here. You're the host: pick a route, then start.`
+        : h ? `Waiting for ${cleanName(h.presence.name)} (host) to start · Route: ${hostRoute.en}` : 'Connecting to the room…';
+    },
+
+    // ---- ghosts of rivals on my road ---------------------------------
+    renderGhosts() {
+      if (!S.raceId || !this.nr) return;
+      const ppm = H / CFG.metersPerScreen; // pixels per meter of road
+      const fs = Math.round(Math.max(11, L * 0.2));
+      for (const p of this.peers) {
+        if (p.sameTab) continue;
+        const pr = p.presence || {};
+        if (pr.rid !== S.raceId || pr.st !== 'racing') continue;
+        const lane = clamp(Math.round(+pr.lane || 0), 0, LANES - 1);
+        const ty = P.y - ((+pr.d || 0) - S.dist) * ppm, tx = laneX(lane, ty);
+        const g = this.ghosts.get(p.peer) || { x: tx, y: ty };
+        g.x += (tx - g.x) * 0.2; g.y += (ty - g.y) * 0.2;
+        this.ghosts.set(p.peer, g);
+        const col = this.colorFor(p.peer), name = cleanName(pr.name);
+        const gap = Math.round((+pr.d || 0) - S.dist);
+        ctx.font = `700 ${fs}px 'Hind Siliguri', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const topY = W < 640 ? 210 : 104; // clear of the HUD chips
+        if (g.y < topY - 8 || g.y > H - bottomReserve - 10) {
+          // off-screen: pin a tag to the edge with the gap in meters
+          const top = g.y < topY - 8;
+          const label = `${top ? '▲' : '▼'} ${name} ${gap >= 0 ? '+' : ''}${gap} m`;
+          const tw = ctx.measureText(label).width + 16, ty2 = top ? topY : H - bottomReserve - 24;
+          const tx2 = clamp(g.x, tw / 2 + 4, W - tw / 2 - 4);
+          ctx.fillStyle = 'rgba(12,8,24,0.8)'; rr(ctx, tx2 - tw / 2, ty2 - fs * 0.8, tw, fs * 1.6, fs * 0.8); ctx.fill();
+          ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+          ctx.fillStyle = col; ctx.fillText(label, tx2, ty2 + 1);
+        } else {
+          ctx.save();
+          ctx.globalAlpha = 0.45;
+          ctx.translate(g.x, g.y - (pr.air ? L * 0.4 : 0));
+          if (pr.air) ctx.scale(1.3, 1.3);
+          drawTomtom(ctx, P.w, P.h, true);
+          ctx.restore();
+          ctx.fillStyle = 'rgba(12,8,24,0.75)';
+          const tw = ctx.measureText(name).width + 12;
+          rr(ctx, g.x - tw / 2, g.y - P.h * 0.75 - fs * 0.75, tw, fs * 1.5, fs * 0.75); ctx.fill();
+          ctx.fillStyle = col; ctx.fillText(name, g.x, g.y - P.h * 0.75 + 1);
+        }
+      }
+    },
+  };
+
+  function tickCountdown(dt) {
+    scrollWorld(H * 0.2, dt);
+    const rem = S.cdAt - Date.now();
+    const n = rem > 0 ? Math.ceil(rem / 1000) : 0;
+    setIf('cd', n, (v) => { ui.cdNum.textContent = v > 0 ? String(v) : 'GO!'; if (v > 0) Sound.sfx.tick(); });
+    if (rem <= 0) { const id = S.cdRace; S.cdRace = null; startGame(id); }
+  }
+
+  // ---- menu wiring ----
+  document.getElementById('gateForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const [n, err] = validName(ui.nameInput.value);
+    if (!n) { ui.nameErr.textContent = err; ui.nameErr.hidden = false; return; }
+    ui.nameErr.hidden = true;
+    S.name = n; store.set('drr-name', n);
+    LB.syncName();
+    showLobby();
+  });
+  document.getElementById('changeName').addEventListener('click', () => {
+    if (MP.nr) MP.leave(true);
+    ui.nameInput.value = S.name;
+    showScreen('gate'); ui.hud.hidden = true;
+  });
+  document.getElementById('createBtn').addEventListener('click', () => MP.join(MP.newCode()));
+  document.getElementById('joinBtn').addEventListener('click', () => MP.join(ui.codeInput.value));
+  ui.codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); MP.join(ui.codeInput.value); } });
+  ui.raceBtn.addEventListener('click', () => MP.startRace());
+  document.getElementById('leaveBtn').addEventListener('click', () => MP.leave(false));
+  document.getElementById('copyCode').addEventListener('click', (e) => {
+    const btn = e.currentTarget, code = MP.code.toUpperCase();
+    const done = () => { btn.textContent = 'Copied'; setTimeout(() => (btn.textContent = 'Copy code'), 1400); };
+    try {
+      navigator.clipboard.writeText(code).then(done, () => { selectText(ui.roomCode); btn.textContent = 'Press Ctrl+C'; });
+    } catch (_) { selectText(ui.roomCode); }
+  });
+  function selectText(node) { try { const r = document.createRange(); r.selectNodeContents(node); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } catch (_) {} }
+
+  /* =========================================================
+     MAIN LOOP
+     ========================================================= */
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    S.t += dt;
+    if (S.mode === 'play') update(dt);
+    else if (S.mode === 'start') { scrollWorld(H * 0.32, dt); S.track += 0.32 * CFG.metersPerScreen * dt; } // ambient street behind the menus
+    else if (S.mode === 'countdown') tickCountdown(dt);
+    if (S.raceId && S.mode === 'play' && MP.nr) {
+      MP.sendRace(false);
+      if (now - MP.lastStand > 250) { MP.lastStand = now; MP.renderStandings(); }
+    }
+    updateFx(dt);
+    Sound.engine(S.vRel || CFG.vBase, S.turbo, S.mode === 'play' && !(S.respawnT > 0));
+    render();
+    updateHUD();
+    requestAnimationFrame(frame);
+  }
+
+  new ResizeObserver(() => resize()).observe(game);
+  resize();
+  drawLegend();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawLegend).catch(() => {});
+  renderRules();
+  ui.nameInput.value = store.get('drr-name') || '';
+  showScreen('gate'); ui.hud.hidden = true;
+  requestAnimationFrame(frame);
+
+  // Connect the shared pieces when the viewer offers them; the game works without.
+  (async () => {
+    const cl = window.claude;
+    const use = (n) => (cl && typeof cl.use === 'function' ? cl.use(n).catch(() => null) : Promise.resolve(null));
+    const [db, user, room] = await Promise.all([use('db'), use('user'), use('room')]);
+    const uid = user ? await user.id().catch(() => null) : null;
+    MP.init(room);
+    LB.init(db, uid);
+  })();
+})();
+</script>
+
+</body>
+</html>
