@@ -17,7 +17,7 @@ python3 -m http.server 8000   # then open http://localhost:8000
 | Route | Stops |
 |---|---|
 | Mirpur Road | Gabtoli → Technical → Shyamoli → Asad Gate → Science Lab → New Market → Azimpur |
-| Mirpur 10 → Shahbagh | Mirpur 10 Circle → Kazipara → Agargaon → Bijoy Sarani → Farmgate → Karwan Bazar → Shahbagh (metro overhead) |
+| Mirpur 10 → Shahbagh | Mirpur 10 Circle → Kazipara → Agargaon → Bijoy Sarani → Farmgate → Karwan Bazar → Shahbagh (MRT Line 6 viaduct on the median, oncoming lanes beyond) |
 | Airport Road | Uttara → Airport → Khilkhet → Kuril → Banani → Mohakhali → Jahangir Gate |
 | Gulshan → Rampura | Gulshan 2 Circle → Gulshan 1 Circle → Badda → Rampura Bridge |
 | Motijheel → Sadarghat | Shapla Chattar → Gulistan → Nawabpur → Bahadur Shah Park → Sadarghat |

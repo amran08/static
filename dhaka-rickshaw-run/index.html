@@ -26,6 +26,7 @@
     --body: 'Hind Siliguri', system-ui, -apple-system, 'Segoe UI', sans-serif;
     color-scheme: dark;
   }
+  *, *::before, *::after { box-sizing: border-box; } /* don't depend on Tailwind's reset loading */
   html { height: 100%; box-sizing: border-box; }
   body { height: 100%; background: var(--night); color: var(--paper); font-family: var(--body); overflow: hidden; }
 
@@ -166,6 +167,8 @@
   .lobby { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; width: 100%; max-width: 900px; margin: auto; align-items: start; }
   @media (min-width: 860px) { .lobby { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
   .lobby .plate { max-width: none; }
+  .lobby > *, .plate, .plate > *, .mpbox, .routes, .route { min-width: 0; }
+  .plate { overflow-wrap: anywhere; }
   .hl { color: var(--yellow); }
   .h2 { font-family: var(--display); font-weight: 800; font-size: 1.5rem; color: var(--yellow); line-height: 1; }
   .field {
@@ -244,6 +247,42 @@
   .countdown span { font-family: var(--display); font-weight: 800; font-size: clamp(5rem, 24vw, 9rem); line-height: 1; color: var(--yellow); text-shadow: 5px 5px 0 var(--red), 10px 10px 0 rgba(0, 0, 0, 0.35); }
   .countdown small { font-family: var(--display); font-weight: 600; font-size: 1.1rem; color: var(--paper); }
 
+  /* ---------- Compact HUD (keeps the road clear) ---------- */
+  .hud { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 6px 8px; padding-block: 8px 0; }
+  .hud-l, .hud-r { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .hud-r { align-items: flex-end; }
+  .hud-c { display: flex; justify-content: center; min-width: 0; }
+  .hpill {
+    display: flex; align-items: center; gap: 7px; padding: 3px 10px; border-radius: 999px; pointer-events: auto;
+    background: rgba(12, 8, 24, 0.55); border: 1px solid rgba(255, 210, 31, 0.3); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  }
+  .hdist { font-family: var(--display); font-weight: 800; font-size: 1.1rem; line-height: 1.1; color: var(--yellow); font-variant-numeric: tabular-nums; }
+  .hdist small { font-size: 0.6em; color: var(--paper); margin-left: 1px; }
+  .hud .hearts { margin: 0; font-size: 0.68rem; letter-spacing: 1px; }
+  .hbest { font-size: 0.6rem; color: rgba(255, 244, 214, 0.55); padding-left: 10px; font-variant-numeric: tabular-nums; }
+  .hud .cells { gap: 2px; padding: 2px; border-width: 1.5px; border-radius: 4px; }
+  .hud .cell { width: 5px; height: 10px; border-radius: 1px; }
+  .hud .nub { width: 3px; height: 6px; }
+  .hud .pct { font-size: 0.78rem; min-width: 2.9ch; }
+  .htags { display: flex; gap: 3px; }
+  .hud .turbo-tag { margin: 0; font-size: 0.56rem; padding: 0 6px; line-height: 1.5; }
+  .hud .sbtn { font-size: 0.85rem; padding: 0 0 0 2px; border: none; background: none; line-height: 1; }
+  .hud .routechip {
+    max-width: 16em; padding: 3px 10px 5px; border-radius: 10px; text-align: center; pointer-events: none;
+    background: rgba(12, 8, 24, 0.55); border: 1px solid rgba(255, 210, 31, 0.3);
+  }
+  .hud .rnext { font-size: 0.74rem; }
+  .hud .rname { color: rgba(255, 244, 214, 0.6); font-weight: 600; }
+  .hud .rbar { height: 3px; margin-top: 3px; }
+  .hud .standings { padding: 3px 8px; border-radius: 8px; background: rgba(12, 8, 24, 0.45); border: none; }
+  .hud .standings ol { font-size: 0.64rem; min-width: 8em; margin: 0; }
+  @media (max-width: 560px) {
+    .hud { grid-template-columns: minmax(0, 1fr) auto; }
+    .hud-c { grid-column: 1 / -1; grid-row: 2; }
+    .hud .rname { display: none; }
+  }
+  @media (max-width: 380px) { .hbest { display: none; } }
+
   @media (prefers-reduced-motion: reduce) { .low .cells { animation: none; } }
 </style>
 <style>html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
@@ -257,33 +296,27 @@
   <!-- Live HUD -->
   <div id="hudLayer" class="layer" hidden>
     <div class="hud">
-      <div class="flex flex-col items-start gap-2">
-        <div class="chip">
-          <div class="label">Distance · দূরত্ব</div>
-          <div class="big"><span id="dist">0</span><small>m</small></div>
-          <div class="sub">Best <span id="bestHud">0</span> m</div>
-          <div class="hearts" id="lives" aria-label="3 lives left">❤❤❤</div>
+      <div class="hud-l">
+        <div class="hpill">
+          <span class="hdist"><span id="dist">0</span><small>m</small></span>
+          <span class="hearts" id="lives" aria-label="5 lives left"></span>
         </div>
-        <button class="sbtn" id="muteBtn" aria-pressed="false">🔊 Sound on</button>
-        <div class="chip standings" id="standings" hidden>
-          <div class="label">Race · রেস</div>
-          <ol id="standList"></ol>
+        <span class="hbest">Best <span id="bestHud">0</span> m</span>
+        <div class="standings" id="standings" hidden><ol id="standList"></ol></div>
+      </div>
+      <div class="hud-c">
+        <div class="routechip" id="routeChip" hidden>
+          <div class="rnext"><span id="routeName" class="rname"></span> → <span id="nextStop">—</span> <b id="nextDist"></b></div>
+          <div class="rbar"><span id="routeFill"></span></div>
         </div>
       </div>
-      <div class="flex flex-col items-end gap-2">
-      <div class="chip" id="batChip">
-        <div class="label" style="text-align:right">Battery · ব্যাটারি</div>
-        <div class="bat">
+      <div class="hud-r">
+        <div class="hpill" id="batChip">
           <div class="cells" id="cells"></div><div class="nub"></div>
           <span class="pct" id="pct">100%</span>
+          <button class="sbtn" id="muteBtn" aria-pressed="false" aria-label="Sound on">🔊</button>
         </div>
-        <div class="flex justify-end gap-1"><span class="turbo-tag" id="flyTag">FLY READY</span><span class="turbo-tag" id="turboTag">TURBO</span><span class="turbo-tag brake-tag" id="brakeTag" hidden>BRAKE</span></div>
-      </div>
-      <div class="chip routechip" id="routeChip" hidden>
-        <div class="label" id="routeName">Route</div>
-        <div class="rnext"><span id="nextStop">—</span> <b id="nextDist"></b></div>
-        <div class="rbar"><span id="routeFill"></span></div>
-      </div>
+        <div class="htags"><span class="turbo-tag" id="flyTag">FLY</span><span class="turbo-tag" id="turboTag">TURBO</span><span class="turbo-tag brake-tag" id="brakeTag" hidden>BRAKE</span></div>
       </div>
     </div>
   </div>
@@ -335,7 +368,7 @@
           <p class="tagline mt-2">Salaam, <b id="hello" class="hl"></b> <button class="link" id="changeName" type="button">change name</button></p>
           <p class="muted text-sm mt-1">You drive a <b class="hl">Bangla Tesla</b> down Mirpur Road at rush hour. Dodge traffic, collect batteries!</p>
         </div>
-        <p class="muted text-sm">You get <b class="hl">5 lives ❤❤❤❤❤</b> per run. Crash or run flat and you respawn right where you were, distance kept, with a 2-second shield. Watch for people crossing: hit one and you lose 100 m.</p>
+
         <p class="fact">Why "Tesla"? Dhaka nicknamed its battery rickshaws after the electric car brand: they run on batteries, and they're the poor man's EV.</p>
         <div class="flex flex-col gap-3">
           <div class="mpbox">
@@ -357,6 +390,7 @@
         <details class="how">
           <summary>How to play</summary>
           <div class="flex flex-col gap-3 mt-3">
+            <p class="muted text-sm">You get <b class="hl">5 lives ❤❤❤❤❤</b> per run. Crash or run flat and you respawn right where you were, distance kept, with a 2-second shield. Watch for people crossing: hit one and you lose 100 m.</p>
             <div class="legend" id="legend">
               <figure><canvas data-kind="cycle"></canvas><figcaption><b>Rickshaw</b>slow</figcaption></figure>
               <figure><canvas data-kind="cng"></canvas><figcaption><b>CNG</b>swerves</figcaption></figure>
@@ -1314,7 +1348,10 @@
     const n = Math.ceil((H + CPAD * 2) / CSTEP) + 2;
     if (curveTab.length !== n) curveTab = new Float32Array(n);
     const b0 = bendAt(S.track), lim = PADX * 0.92;
-    for (let i = 0; i < n; i++) curveTab[i] = clamp(bendAt(trackAt(i * CSTEP - CPAD)) - b0, -lim, lim);
+    // metro route: slide the view left just enough to show the median, viaduct and some oncoming lanes
+    const want = activeRoute().metro && S.mode !== 'start' ? clamp(L * 1.75 - roadX, 0, Math.max(0, roadX - 10)) : 0;
+    S.camShift = (S.camShift || 0) + (want - (S.camShift || 0)) * 0.08;
+    for (let i = 0; i < n; i++) curveTab[i] = clamp(bendAt(trackAt(i * CSTEP - CPAD)) - b0 - S.camShift, -lim, lim);
   }
   function offY(y) {
     const f = (y + CPAD) / CSTEP, i = Math.floor(f);
@@ -1356,7 +1393,7 @@
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     PADX = Math.ceil(W * 0.6);
     gcv.width = ocv.width = Math.round((W + PADX * 2) * DPR); gcv.height = ocv.height = Math.round(H * DPR);
-    roadW = Math.min(W * 0.74, 440, H * 0.52);
+    roadW = Math.min(W * (W < 600 ? 0.64 : 0.7), 440, H * 0.52);
     L = roadW / LANES;
     roadX = (W - roadW) / 2;
     FP = Math.min(roadX * 0.3, L * 0.35);
@@ -1383,7 +1420,7 @@
     v: 0, scroll: 0, turbo: false, shake: 0, spawnT: 1, itemT: 2.5,
     obstacles: [], items: [], particles: [], floaters: [],
     buildings: { L: [], R: [] }, wires: [], reason: '', newBest: false, runId: 0,
-    marks: [], bridges: [], decor: [],
+    marks: [], bridges: [], decor: [], oncoming: [],
     track: 0, runTime: 0, finished: false, finishTime: 0, evDone: new Set(), routeId: store.get('drr-route') || 'mirpur-road', routeRun: 'endless', raceRoute: null,
     name: '', raceId: null, cdRace: null, cdAt: 0, lastRaceDist: 0,
   };
@@ -1470,6 +1507,7 @@
 
   function scrollWorld(v, dt) {
     S.scroll += v * dt;
+    updateOncoming(v, dt);
     for (const side of ['L', 'R']) {
       const arr = S.buildings[side];
       for (const b of arr) b.y += v * dt;
@@ -1500,7 +1538,15 @@
     S.bridges = S.bridges.filter((b) => b.y < H + L * 3);
     if (!S.bridges.length || S.bridges[0].y > -L * 3) {
       const top = S.bridges.length ? S.bridges[0].y : 0;
-      S.bridges.unshift(makeBridge(top - rand(H * 2.2, H * 3.8)));
+      let by = top - rand(H * 2.2, H * 3.8);
+      // keep foot over-bridges clear of junctions, roundabouts and the finish
+      const r = activeRoute();
+      if (!r.endless) for (let pass = 0; pass < 3; pass++) {
+        const clash = r.events.some((ev) => ev.kind !== 'stop' && ev.kind !== 'start' && Math.abs(eventY(ev) - by) < H * 0.9);
+        if (!clash) break;
+        by -= H * 1.1;
+      }
+      S.bridges.unshift(makeBridge(by));
     }
     // people strolling on the footpaths
     if (FP > 11) {
@@ -1837,7 +1883,7 @@
   function toggleMute() {
     const m = Sound.toggleMute();
     if (m) Voice.stop();
-    ui.mute.textContent = m ? '🔇 Sound off' : '🔊 Sound on';
+    ui.mute.textContent = m ? '🔇' : '🔊'; ui.mute.setAttribute('aria-label', m ? 'Sound off' : 'Sound on');
     ui.mute.setAttribute('aria-pressed', String(m));
   }
 
@@ -2441,26 +2487,100 @@
     ctx.beginPath(); ctx.moveTo(-s * 0.38, 0); ctx.lineTo(-s * 0.46, -s * 0.15); ctx.lineTo(-s * 0.5, -s * 0.15); ctx.lineTo(-s * 0.46, 0);
     ctx.lineTo(-s * 0.5, s * 0.15); ctx.lineTo(-s * 0.46, s * 0.15); ctx.closePath(); ctx.fill();
   }
-  // Elevated metro line above the middle of Begum Rokeya Sarani, with a train now and then.
-  function renderMetro() {
-    if (!activeRoute().metro) return;
-    const vw = L * 0.6, x = W / 2 - vw / 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x + L * 0.35, 0, vw, H);
-    const g = ctx.createLinearGradient(x, 0, x + vw, 0);
-    g.addColorStop(0, '#8c877f'); g.addColorStop(0.2, '#b9b3a8'); g.addColorStop(1, '#77726a');
-    ctx.globalAlpha = 0.9; ctx.fillStyle = g; ctx.fillRect(x, 0, vw, H);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    const gap = L * 3.2, off = (S.scroll * 1.12) % gap;
-    for (let y = off - gap; y < H; y += gap) ctx.fillRect(x, y, vw, 3); // joints over the pillars
-    ctx.fillStyle = '#3d3f44'; ctx.fillRect(x + vw * 0.28, 0, 2, H); ctx.fillRect(x + vw * 0.7, 0, 2, H); // rails
-    const cyc = 9, ph = (S.t % cyc) / cyc;
-    if (ph < 0.45) {
-      const ty = H + L * 6 - (ph / 0.45) * (H + L * 14), tl = L * 6;
-      ctx.fillStyle = '#eef1f3'; rr(ctx, x + vw * 0.12, ty, vw * 0.76, tl, vw * 0.3); ctx.fill();
-      ctx.fillStyle = '#c62828'; ctx.fillRect(x + vw * 0.12, ty + tl * 0.08, vw * 0.76, 2);
-      ctx.fillStyle = '#0b6b3a'; ctx.fillRect(x + vw * 0.12, ty + tl * 0.5, vw * 0.76, 2);
+  // MRT Line 6 runs above the road's centre median. We drive the left-hand
+  // carriageway (Bangladesh drives on the left), so the median, its pillars and
+  // the viaduct sit on our right, with the oncoming carriageway beyond.
+  const metroOn = () => activeRoute().metro && S.mode !== 'start';
+  const MEDIAN = () => L * 0.5;
+
+  function renderMetroGround() {
+    if (!metroOn()) return;
+    const M = MEDIAN(), x0 = roadX + roadW, oppW = L * 3, xf = x0 + M + oppW;
+    // oncoming carriageway
+    asphaltBand(x0 + M, 0, oppW, H);
+    ctx.fillStyle = 'rgba(245,240,225,0.55)';
+    const period = L * 1.4, off = S.scroll % period;
+    for (let k = 1; k < 3; k++) for (let y = off - period; y < H; y += period) ctx.fillRect(x0 + M + L * k - 1.5, y, 3, L * 0.7);
+    ctx.fillStyle = '#766d66'; ctx.fillRect(xf, 0, Math.max(FP, 8), H); // far footpath
+    // median: raised concrete strip with painted kerbs
+    ctx.fillStyle = '#8f897f'; ctx.fillRect(x0, 0, M, H);
+    const seg = L * 0.4, coff = S.scroll % (seg * 2);
+    for (let y = coff - seg * 2; y < H; y += seg) {
+      ctx.fillStyle = Math.round((y - coff) / seg) % 2 === 0 ? '#ffd21f' : '#1c1c1f';
+      ctx.fillRect(x0, y, 3, seg); ctx.fillRect(x0 + M - 3, y, 3, seg);
     }
-    ctx.globalAlpha = 1;
+    // pillars standing in the median, with long shadows across the oncoming lanes
+    const gap = L * 3.4, poff = S.scroll % gap, r = M * 0.36;
+    for (let y = poff - gap; y < H + gap; y += gap) {
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.beginPath(); ctx.moveTo(x0 + M / 2 - r, y); ctx.lineTo(x0 + M / 2 + r, y); ctx.lineTo(x0 + M / 2 + r + L * 1.1, y + L * 0.7); ctx.lineTo(x0 + M / 2 - r + L * 1.1, y + L * 0.7); ctx.closePath(); ctx.fill();
+      const g = ctx.createRadialGradient(x0 + M / 2 - r * 0.4, y - r * 0.4, 1, x0 + M / 2, y, r);
+      g.addColorStop(0, '#d7d1c6'); g.addColorStop(1, '#7c776f');
+      ctx.fillStyle = g; dot(ctx, x0 + M / 2, y, r);
+    }
+  }
+
+  // Elevated deck over the median: parapets, ballast, sleepers, rails, masts, train.
+  function renderMetro() {
+    if (!metroOn()) return;
+    const M = MEDIAN(), xm = roadX + roadW + M / 2, dw = L * 0.95, x = xm - dw / 2;
+    const scr = S.scroll * 1.12;
+    ctx.fillStyle = 'rgba(0,0,0,0.26)'; ctx.fillRect(x + L * 0.55, -10, dw, H + 20); // deck shadow, cast right
+    const g = ctx.createLinearGradient(x, 0, x + dw, 0);
+    g.addColorStop(0, '#6f6a63'); g.addColorStop(0.1, '#b7b1a6'); g.addColorStop(0.5, '#a39d92'); g.addColorStop(0.9, '#8a857c'); g.addColorStop(1, '#58544e');
+    ctx.fillStyle = g; ctx.fillRect(x, -10, dw, H + 20);
+    ctx.fillStyle = '#d2ccc1'; ctx.fillRect(x + dw * 0.04, -10, dw * 0.06, H + 20); ctx.fillRect(x + dw * 0.9, -10, dw * 0.06, H + 20); // parapets
+    ctx.fillStyle = '#57534d'; ctx.fillRect(x + dw * 0.2, -10, dw * 0.6, H + 20); // track bed
+    const so = scr % 7;
+    ctx.fillStyle = 'rgba(28,26,24,0.65)';
+    for (let y = so - 7; y < H; y += 7) ctx.fillRect(x + dw * 0.24, y, dw * 0.52, 2); // sleepers
+    ctx.fillStyle = '#d9dcdf'; ctx.fillRect(x + dw * 0.33, -10, 1.6, H + 20); ctx.fillRect(x + dw * 0.66, -10, 1.6, H + 20); // rails
+    const gap = L * 3.4, jo = scr % gap;
+    for (let y = jo - gap; y < H + gap; y += gap) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x, y, dw, 2); // expansion joint
+      ctx.fillStyle = '#2f3136'; ctx.fillRect(x + dw * 0.04, y + 4, dw * 0.08, 4); // catenary mast
+      ctx.strokeStyle = 'rgba(40,40,44,0.8)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + dw * 0.1, y + 6); ctx.lineTo(x + dw * 0.5, y + 6); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(40,40,44,0.55)'; ctx.beginPath(); ctx.moveTo(x + dw * 0.5, -10); ctx.lineTo(x + dw * 0.5, H + 10); ctx.stroke(); // contact wire
+    // a six-car train every few seconds, alternating direction
+    const cyc = 10, n = Math.floor(S.t / cyc), ph = (S.t % cyc) / cyc;
+    if (ph < 0.5) {
+      const up = n % 2 === 0, carL = L * 1.35, total = carL * 6 + 10, span = H + total + L * 4;
+      const head = up ? H + L * 2 - (ph / 0.5) * span : -total - L * 2 + (ph / 0.5) * span;
+      for (let i = 0; i < 6; i++) {
+        const cy = head + i * (carL + 2), cx = x + dw * 0.22, cw = dw * 0.56;
+        ctx.fillStyle = 'rgba(0,0,0,0.25)'; rr(ctx, cx + 4, cy + 4, cw, carL, cw * 0.25); ctx.fill();
+        ctx.fillStyle = curve(ctx, cx, cw, '#e9edf0', 0.6); rr(ctx, cx, cy, cw, carL, (i === 0 && up) || (i === 5 && !up) ? cw * 0.45 : cw * 0.2); ctx.fill();
+        ctx.fillStyle = '#1f2a36'; ctx.fillRect(cx + cw * 0.08, cy + carL * 0.08, cw * 0.84, carL * 0.04); ctx.fillRect(cx + cw * 0.08, cy + carL * 0.88, cw * 0.84, carL * 0.04);
+        ctx.fillStyle = '#c62828'; ctx.fillRect(cx + cw * 0.06, cy + carL * 0.2, cw * 0.06, carL * 0.6); ctx.fillRect(cx + cw * 0.88, cy + carL * 0.2, cw * 0.06, carL * 0.6);
+        ctx.fillStyle = '#0b6b3a'; ctx.fillRect(cx + cw * 0.45, cy + carL * 0.3, cw * 0.1, carL * 0.4); // pantograph area
+      }
+    }
+  }
+
+  // Oncoming traffic on the far carriageway (scenery only, never collides).
+  function updateOncoming(v, dt) {
+    if (!metroOn() || S.mode !== 'play') { if (S.mode === 'start') S.oncoming = []; return; }
+    for (const o of S.oncoming) o.y += (v + o.sp) * dt;
+    S.oncoming = S.oncoming.filter((o) => o.y < H + L * 4);
+    if (S.oncoming.length < 6 && Math.random() < dt * 1.1) {
+      const base = pick(['car', 'car', 'cng', 'bus', 'cycle']);
+      const o = { base, lx: LANES + MEDIAN() / L + ((Math.random() * 3) | 0), y: -L * 3, sp: H * rand(0.35, 0.6), w: TYPES[base].w * L, h: TYPES[base].h * L };
+      if (base === 'car') o.color = pick(CAR_COLORS);
+      if (base === 'cycle') { o.color = pick(HOODS); o.shirt = pick(SHIRTS); o.sp *= 0.4; }
+      if (base === 'bus') { o.line = pick(BUS_LINES); o.color = o.line.col[0]; o.stripe = o.line.col[1]; o.dents = []; }
+      S.oncoming.push(o);
+    }
+  }
+  function drawOncoming() {
+    for (const o of S.oncoming) {
+      const x = laneX(o.lx, o.y);
+      if (x < -L * 2 || x > W + L * 2) continue;
+      ctx.save(); ctx.translate(x, o.y); ctx.rotate(Math.PI + Math.atan(slopeAt(o.y)));
+      drawVehicle(ctx, o.base, o.w, o.h, o, S.t);
+      ctx.restore();
+    }
   }
 
   // Copy a straight-space layer to the screen one row-band at a time, shifted by the bend.
@@ -2619,6 +2739,7 @@
     ctx.fillStyle = '#1c1c1f'; ctx.fillRect(-PADX, 0, W + PADX * 2, H);
     renderSides();
     renderRoad();
+    renderMetroGround();
     renderEventsGround();
     // overhead layer: metro, bridges, wires, signs
     ctx = octx;
@@ -2636,6 +2757,7 @@
     warpBlit(gcv);
     renderLights();
 
+    drawOncoming();
     for (const o of S.obstacles) if (o.type === 'pothole') drawObstacle(ctx, o, S.t);
     for (const it of S.items) {
       ctx.save(); ctx.translate(it.x, it.y + Math.sin(S.t * 4 + it.seed) * 2); drawBattery(ctx, it.w, it.h, S.t + it.seed); ctx.restore();
@@ -2695,11 +2817,13 @@
 
     // floating text
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `800 ${Math.round(Math.max(16, L * 0.3))}px 'Baloo Da 2', sans-serif`;
     for (const f of S.floaters) {
+      const long = f.text.length > 12;
+      ctx.font = `800 ${Math.round(long ? Math.max(13, L * 0.22) : Math.max(16, L * 0.3))}px 'Baloo Da 2', sans-serif`;
+      const maxW = W - 32, fx = clamp(f.x, 16 + Math.min(maxW, ctx.measureText(f.text).width) / 2, W - 16 - Math.min(maxW, ctx.measureText(f.text).width) / 2);
       ctx.globalAlpha = clamp(f.life, 0, 1);
-      ctx.fillStyle = '#140f1f'; ctx.fillText(f.text, f.x + 2, f.y + 2);
-      ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+      ctx.fillStyle = '#140f1f'; ctx.fillText(f.text, fx + 2, f.y + 2, maxW);
+      ctx.fillStyle = f.color; ctx.fillText(f.text, fx, f.y, maxW);
     }
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -2780,7 +2904,7 @@
     setIf('turbo', S.turbo, (v) => ui.turbo.classList.toggle('on', v));
     setIf('brake', !!S.brake && S.mode === 'play', (v) => { ui.brakeTag.hidden = !v; ui.turbo.hidden = v; });
     const r = activeRoute(), showRoute = S.mode !== 'start' && !r.endless;
-    setIf('rchip', showRoute ? r.id : '', (v) => { ui.routeChip.hidden = !v; if (v) ui.routeName.textContent = `${r.bn} · ${r.to}`; });
+    setIf('rchip', showRoute ? r.id : '', (v) => { ui.routeChip.hidden = !v; if (v) ui.routeName.textContent = r.bn; });
     if (showRoute) {
       const next = r.events.find((e) => e.kind !== 'start' && e.at > S.track) || r.events[r.events.length - 1];
       setIf('rnext', next.bn, (v) => { ui.nextStop.textContent = v; });
@@ -2789,7 +2913,7 @@
     }
     const flyState = P.air > 0 ? 'air' : P.cool > 0 ? 'cool:' + Math.ceil(P.cool) : S.battery <= CFG.flyCost + 1 ? 'low' : 'ready';
     setIf('fly', flyState, (v) => {
-      ui.fly.textContent = v === 'air' ? 'FLYING' : v === 'ready' ? 'FLY READY' : v === 'low' ? 'FLY: LOW BATT' : `FLY ${v.split(':')[1]}s`;
+      ui.fly.textContent = v === 'air' ? 'FLYING' : v === 'ready' ? 'FLY' : v === 'low' ? 'FLY ✕' : `FLY ${v.split(':')[1]}s`;
       ui.fly.classList.toggle('fly-ready', v === 'ready');
       ui.fly.classList.toggle('fly-air', v === 'air');
       ui.flyBtn.classList.toggle('cooling', v !== 'ready' && v !== 'air');
@@ -2837,7 +2961,7 @@
   bindTap(document.getElementById('btnH'), honk);
   bindTap(document.getElementById('btnF'), fly);
   ui.mute.addEventListener('click', toggleMute);
-  ui.mute.textContent = Sound.isMuted() ? '🔇 Sound off' : '🔊 Sound on';
+  ui.mute.textContent = Sound.isMuted() ? '🔇' : '🔊';
   ui.mute.setAttribute('aria-pressed', String(Sound.isMuted()));
   const btnT = document.getElementById('btnT');
   btnT.addEventListener('pointerdown', (e) => { e.preventDefault(); try { btnT.setPointerCapture(e.pointerId); } catch (_) {} input.turboTouch = true; btnT.classList.add('active'); });
@@ -3249,7 +3373,7 @@
         const col = this.colorFor(p.peer), name = cleanName(pr.name);
         const gap = Math.round((+pr.d || 0) - S.dist);
         ctx.font = `700 ${fs}px 'Hind Siliguri', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const topY = W < 640 ? 210 : 104; // clear of the HUD chips
+        const topY = W <= 560 ? 104 : 66; // just below the compact HUD
         if (g.y < topY - 8 || g.y > H - bottomReserve - 10) {
           // off-screen: pin a tag to the edge with the gap in meters
           const top = g.y < topY - 8;
